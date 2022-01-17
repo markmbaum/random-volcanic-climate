@@ -1,2 +1,7 @@
+name = "Random Volcanic Climate"
+authors = ["Mark Baum <markmbaum@protonmail.com>"]
+[compat]
+julia = "1.6.4"
+DrWatson = "2.7.5"
 [deps]
 DrWatson = "634d3b9d-ee7a-5ddf-bec9-22491ea816e1"
