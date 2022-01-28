@@ -2,14 +2,20 @@ name = "Random Volcanic Climate"
 authors = ["Mark Baum <markmbaum@protonmail.com>"]
 
 [deps]
+BasicInterpolators = "26cce99e-4866-4b6d-ab74-862489e035e0"
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 Cubature = "667455a9-e2ce-5579-9412-b964f529a492"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 DrWatson = "634d3b9d-ee7a-5ddf-bec9-22491ea816e1"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+GEOCLIM = "3dbb98da-0543-4a00-be75-dcc1e89fb417"
+ProfileView = "c46f51b8-102a-5cf2-8d2c-8597cb0e0da7"
 PyPlot = "d330b81b-6aea-500a-939a-2ce795aea3ee"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Roots = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 
 [compat]
-DrWatson = "2.7.5"
-julia = "1.6.4"
+DrWatson = "2.9.1"
+julia = "1.7"
