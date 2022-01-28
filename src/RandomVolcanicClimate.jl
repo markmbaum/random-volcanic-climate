@@ -191,7 +191,7 @@ function step(t, C, Δt, Δtₛ, μ, V, 𝒻W)::Float64
     #ordinary part
     C += Δt*(μ - 𝒻W(t,C))
     #random part
-    C += Δtₛ*(rand(V) - μ)*8e5
+    C += Δtₛ*(rand(V) - μ)*1e5
     return C
 end
 
@@ -215,33 +215,6 @@ end
 #function barrier, type flexible
 function simulate(V, 𝒻W, t₁=2.5, t₂=4.5; nstep::Int=100_000)
     simulate(V, 𝒻W, Float64(t₁), Float64(t₂), Float64(𝒻Cₑ(t₁)), nstep)
-end
-
-function integrate(V::Sampleable{Univariate,Continuous},
-                   𝒻W::F,
-                   C₁::Float64,
-                   t₁::Float64,
-                   t₂::Float64,
-                   nstep::Int) where {F<:Function}
-    t, Δt, Δtₛ, μ = setup(V, t₁, t₂, nstep)
-    C = C₁
-    for _ ∈ 1:nstep
-        C = step(t, C, Δt, Δtₛ, μ, V, 𝒻W)
-        t += Δt
-    end
-    return C
-end
-
-function integrate(V, 𝒻W, t₁=2.5, t₂=4.5; nstep::Int=10_000)
-    integrate(V, 𝒻W, Float64(t₁), Float64(t₂), 𝒻Cₑ(t₁), nstep)
-end
-
-function integrations(N::Int, args...; kw...)
-    C = zeros(N)
-    @threads for i ∈ 1:N
-        C[i] = integrate(args...; kw...)
-    end
-    return C
 end
 
 end
