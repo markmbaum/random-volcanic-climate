@@ -40,12 +40,12 @@ const 𝐅 = 1366.0
 #------------------------------------------------------------------------------
 # physical constants of choice, reference values
 
-export fCO2ᵣ, Cᵣ, Tᵣ, pᵣ, αᵣ, OLRᵣ, hᵣ, pᵣ
+export fCO2ᵣ, Cᵣ, Tᵣ, pᵣ, αᵣ, OLRᵣ, hᵣ, pᵣ, Vᵣ, γ
 
 #reference molar concentration of CO2 [ppm]
 const fCO2ᵣ = 285.0
-#reference total carbon in ocean-atmosphere [moles]
-const Cᵣ = 3.193e18
+#reference total carbon in ocean-atmosphere [teramole]
+const Cᵣ = 3.193e18/1e12
 #reference temperature [K]
 const Tᵣ = 288.0
 #reference precipitation rate [m/s]
@@ -58,10 +58,14 @@ const ϵ = 0.03
 const αᵣ = 0.3
 #reference OLR [W/m^2]
 const OLRᵣ = (1 - αᵣ)*𝐅/4
-#default parameter for CO2 partioning
-const hᵣ = 2.3269250670587494e20
+#default parameter for CO2 partioning [teramole]
+const hᵣ = 2.3269250670587494e20/1e12
 #reference atmospheric pressure excluding CO2
 const Pᵣ = 1e5 - 28.5
+#default volcanic CO2 outgassing rate [teramole/yr]
+const Vᵣ = 7.0
+#land fraction for mac
+const γ = 0.3
 
 #OLR response to temperature
 const a = 2.0
@@ -89,7 +93,7 @@ export 𝒻☉, 𝒻F, 𝒻S, 𝒻T, 𝒻ϕ, 𝒻pCO2, 𝒻fCO2, 𝒻OLR, 𝒻RI
 𝒻ϕ(C=Cᵣ, h=hᵣ) = 0.78*C/(C + h)
 
 #partial pressure of CO2 [Pa]
-𝒻pCO2(C=Cᵣ, h=hᵣ) = 𝒻ϕ(C,h)*C*𝛍*𝐠/𝐒ₑ
+𝒻pCO2(C=Cᵣ, h=hᵣ) = 𝒻ϕ(C,h)*(C*1e12)*𝛍*𝐠/𝐒ₑ
 
 #molar concentration of CO2 [ppmv]
 function 𝒻fCO2(C=Cᵣ, P=Pᵣ, h=hᵣ)
@@ -122,22 +126,23 @@ function 𝒻Cₑ(t=𝐭, Tₑ=Tᵣ)
     exp10(
         find_zero(
             x -> 𝒻RI(Tₑ, 𝒻fCO2(exp10(x)), t),
-            (16, 22) #good bracketing initial guesses
+            (4, 10) #good bracketing initial guesses in log space
         )
     )
 end
 
 #simple struct to rapidly interpolate χ values instead of root finding
-struct Χ{𝒯<:ChebyshevInterpolator} #capital Chi here
-    interpolator::𝒯
+struct Χ #capital Chi here
+    interpolator::ChebyshevInterpolator{32,Float64}
 end
 
-function Χ(Tₑ=Tᵣ; N::Int=32)
+#inner constructor
+function Χ(Tₑ::Real=Tᵣ) 
     I = ChebyshevInterpolator(
         t -> log(𝒻Cₑ(t, Float64(Tₑ))), #function to approximate
         2.5, #time interval beginning
         𝐭, #time interval end
-        N #number of interpolation nodes
+        32 #number of interpolation nodes
     )
     Χ(I)
 end
@@ -146,19 +151,19 @@ end
 (χ::Χ)(t) = exp(χ.interpolator(t))
 
 #same idea, but for rate of carbon change to maintain equilibrium
-struct dΧ{𝒯<:ChebyshevInterpolator} #capital Chi here
-    interpolator::𝒯
+struct dΧ #capital Chi here
+    interpolator::ChebyshevInterpolator{32,Float64}
 end
 
-function dΧ(Tₑ=Tᵣ; N::Int=32)
-    #construct the carbon curve
-    χ = Χ(Tₑ, N=N)
+function dΧ(Tₑ::Real=Tᵣ)
+    #construct the carbon curve before taking its derivative
+    χ = Χ(Tₑ)
     #make an interpolator for its derivative using ForwardDiff.jl
     I = ChebyshevInterpolator(
         t -> log(-derivative(χ, t)), #function to approximate
         2.5, #time interval beginning
         𝐭, #time interval end
-        N #number of interpolation nodes
+        32 #number of interpolation nodes
     )
     dΧ(I)
 end
@@ -168,6 +173,32 @@ end
 #------------------------------------------------------------------------------
 # weathering
 
+export 𝒻whak, 𝒻mac
+
+#MAC calibration constant
+const kᵣ = Vᵣ/whak(𝒻q(), Tᵣ, fCO2ᵣ, 1.0, 11.1, Tᵣ, fCO2ᵣ)
+
+function 𝒻whak(t=𝐭, C=Cᵣ)
+    #CO2 concentration
+    fCO2 = 𝒻fCO2(C)
+    #global temperature
+    T = 𝒻T(fCO2, t)
+    #global runoff
+    q = 𝒻q(T, t)
+    #weathering rate [teramole/yr]
+    whak(q, T, fCO2, kᵣ, 11.1, Tᵣ, fCO2ᵣ)
+end
+
+function 𝒻mac(t=𝐭, C=Cᵣ)
+    #CO2 concentration
+    fCO2 = 𝒻fCO2(C)
+    #global temperature
+    T = 𝒻T(fCO2, t)
+    #global runoff
+    q = 𝒻q(T, t)
+    #weathering rate [teramole/yr]
+    mac(q, T, fCO2, 11.1, Tᵣ, fCO2ᵣ, Λ=6.1e-5)*0.3*𝐒ₑ*yr/1e12
+end
 
 #------------------------------------------------------------------------------
 # integration/modeling
@@ -189,9 +220,9 @@ end
 
 function step(t, C, Δt, Δtₛ, μ, V, 𝒻W)::Float64
     #ordinary part
-    C += Δt*(μ - 𝒻W(t,C))
+    C += Δt*(μ - 𝒻W(t,C))*1.5e7
     #random part
-    C += Δtₛ*(rand(V) - μ)*1e5
+    C += Δtₛ*(rand(V) - μ)*6e4
     return C
 end
 
@@ -212,8 +243,7 @@ function simulate(V::Sampleable{Univariate,Continuous},
     return t, C
 end
 
-#function barrier, type flexible
-function simulate(V, 𝒻W, t₁=2.5, t₂=4.5; nstep::Int=100_000)
+function simulate(V, 𝒻W, t₁=2.5, t₂=4.5; nstep::Int=10_000)
     simulate(V, 𝒻W, Float64(t₁), Float64(t₂), Float64(𝒻Cₑ(t₁)), nstep)
 end
 
