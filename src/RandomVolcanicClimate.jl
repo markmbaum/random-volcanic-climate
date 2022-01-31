@@ -5,7 +5,7 @@ using Distributions
 using Roots: find_zero
 using BasicInterpolators: ChebyshevInterpolator
 using ForwardDiff: derivative
-using GEOCLIM: whak, mac
+using GEOCLIM: godderis, whak, mac
 
 include("PowerLawDistribution.jl")
 using .PowerLawDistribution
@@ -23,6 +23,8 @@ const Gyr = 1e3*Myr
 
 #------------------------------------------------------------------------------
 # immutable physical constants
+
+export 𝐭, 𝐠, 𝛍, 𝐑ₑ, 𝐒ₑ, 𝐅
 
 #age of solar system [Gyr]
 const 𝐭 = 4.5
@@ -175,29 +177,30 @@ end
 
 export 𝒻whak, 𝒻mac
 
-#MAC calibration constant
-const kᵣ = Vᵣ/whak(𝒻q(), Tᵣ, fCO2ᵣ, 1.0, 11.1, Tᵣ, fCO2ᵣ)
-
-function 𝒻whak(t=𝐭, C=Cᵣ)
-    #CO2 concentration
+function preweathering(C, t)
+    #CO2 concentration [ppm]
     fCO2 = 𝒻fCO2(C)
-    #global temperature
+    #global temperature [K]
     T = 𝒻T(fCO2, t)
-    #global runoff
+    #global runoff [m/s]
     q = 𝒻q(T, t)
-    #weathering rate [teramole/yr]
-    whak(q, T, fCO2, kᵣ, 11.1, Tᵣ, fCO2ᵣ)
+    return fCO2, T, q
 end
 
-function 𝒻mac(t=𝐭, C=Cᵣ)
-    #CO2 concentration
-    fCO2 = 𝒻fCO2(C)
-    #global temperature
-    T = 𝒻T(fCO2, t)
-    #global runoff
-    q = 𝒻q(T, t)
-    #weathering rate [teramole/yr]
-    mac(q, T, fCO2, 11.1, Tᵣ, fCO2ᵣ, Λ=6.1e-5)*0.3*𝐒ₑ*yr/1e12
+function 𝒻whak(C=Cᵣ, t=𝐭; k=0.00457458510018399, β=0.2)
+    fCO2, T, q = preweathering(C, t)
+    #weathering rate [mole/second]
+    w = whak(q, T, fCO2, k, 11.1, Tᵣ, fCO2ᵣ, β)
+    #global weathering [teramole/year]
+    w*(0.3*𝐒ₑ*yr/1e12)
+end
+
+function 𝒻mac(C=Cᵣ, t=𝐭; Λ=6.080435119578061e-5)
+    fCO2, T, q = preweathering(C, t)
+    #weathering rate [mole/second]
+    w = mac(q, T, 1e-6*fCO2, 11.1, Tᵣ, 1e-6*fCO2ᵣ, Λ=Λ)
+    #global weathering [teramole/year]
+    w*(0.3*𝐒ₑ*yr/1e12)
 end
 
 #------------------------------------------------------------------------------
@@ -220,9 +223,9 @@ end
 
 function step(t, C, Δt, Δtₛ, μ, V, 𝒻W)::Float64
     #ordinary part
-    C += Δt*(μ - 𝒻W(t,C))*1.5e7
+    C += Δt*1e9*μ - Δt*1e9*𝒻W(C,t)
     #random part
-    C += Δtₛ*(rand(V) - μ)*6e4
+    C += Δtₛ*1e6*(rand(V) - μ)
     return C
 end
 
@@ -243,8 +246,13 @@ function simulate(V::Sampleable{Univariate,Continuous},
     return t, C
 end
 
-function simulate(V, 𝒻W, t₁=2.5, t₂=4.5; nstep::Int=10_000)
-    simulate(V, 𝒻W, Float64(t₁), Float64(t₂), Float64(𝒻Cₑ(t₁)), nstep)
+function simulate(V, 𝒻W; C₁=nothing, t₁=2.5, t₂=4.5, nstep::Int=100_000)
+    if isnothing(C₁)
+        t, C = simulate(V, 𝒻W, Float64(t₁), Float64(t₂), Float64(𝒻Cₑ(t₁)), nstep)
+    else
+        t, C = simulate(V, 𝒻W, Float64(t₁), Float64(t₂), C₁, nstep)
+    end
+    return t, C
 end
 
 end
