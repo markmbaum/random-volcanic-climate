@@ -138,7 +138,7 @@ struct Χ #capital Chi here
     interpolator::ChebyshevInterpolator{32,Float64}
 end
 
-#inner constructor
+#constructor
 function Χ(Tₑ::Real=Tᵣ) 
     I = ChebyshevInterpolator(
         t -> log(𝒻Cₑ(t, Float64(Tₑ))), #function to approximate
@@ -175,7 +175,7 @@ end
 #------------------------------------------------------------------------------
 # weathering
 
-export 𝒻whak, 𝒻mac
+export 𝒻whak, 𝒻mac, 𝒻Wₑ
 
 function preweathering(C, t)
     #CO2 concentration [ppm]
@@ -187,7 +187,7 @@ function preweathering(C, t)
     return fCO2, T, q
 end
 
-function 𝒻whak(C=Cᵣ, t=𝐭; k=0.00457458510018399, β=0.2)
+function 𝒻whak(C=Cᵣ, t=𝐭; k=0.2287292550091995, β=0.2)
     fCO2, T, q = preweathering(C, t)
     #weathering rate [mole/second]
     w = whak(q, T, fCO2, k, 11.1, Tᵣ, fCO2ᵣ, β)
@@ -195,13 +195,15 @@ function 𝒻whak(C=Cᵣ, t=𝐭; k=0.00457458510018399, β=0.2)
     w*(0.3*𝐒ₑ*yr/1e12)
 end
 
-function 𝒻mac(C=Cᵣ, t=𝐭; Λ=6.080435119578061e-5)
+function 𝒻mac(C=Cᵣ, t=𝐭; Λ=6.1837709746872e-5)
     fCO2, T, q = preweathering(C, t)
     #weathering rate [mole/second]
-    w = mac(q, T, 1e-6*fCO2, 11.1, Tᵣ, 1e-6*fCO2ᵣ, Λ=Λ)
+    w = mac(q, T, fCO2, 11.1, Tᵣ, fCO2ᵣ, Λ=Λ)
     #global weathering [teramole/year]
     w*(0.3*𝐒ₑ*yr/1e12)
 end
+
+𝒻Wₑ(𝒻W::F, t=𝐭, V=Vᵣ) where {F} = find_zero(C->𝒻W(C,t) - V, Cᵣ)
 
 #------------------------------------------------------------------------------
 # integration/modeling
@@ -223,7 +225,7 @@ end
 
 function step(t, C, Δt, Δtₛ, μ, V, 𝒻W)::Float64
     #ordinary part
-    C += Δt*1e9*μ - Δt*1e9*𝒻W(C,t)
+    C += Δt*(μ - 𝒻W(C,t))*1e9
     #random part
     C += Δtₛ*1e6*(rand(V) - μ)
     return C
@@ -246,7 +248,7 @@ function simulate(V::Sampleable{Univariate,Continuous},
     return t, C
 end
 
-function simulate(V, 𝒻W; C₁=nothing, t₁=2.5, t₂=4.5, nstep::Int=100_000)
+function simulate(V, 𝒻W; C₁=nothing, t₁=2.5, t₂=4.5, nstep::Int=1_000_000)
     if isnothing(C₁)
         t, C = simulate(V, 𝒻W, Float64(t₁), Float64(t₂), Float64(𝒻Cₑ(t₁)), nstep)
     else

@@ -7,7 +7,7 @@ using Roots: find_zero
 ## calibration conditions
 
 #target weathering rate to balance outgassing [teramole/yr]
-W₀ = Vᵣ/60
+W₀ = Vᵣ
 #ocean atmosphere carbon [teramole]
 C = Cᵣ
 #age of solar system [Gyr]
