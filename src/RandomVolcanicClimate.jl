@@ -178,12 +178,9 @@ end
 export 𝒻whak, 𝒻mac, 𝒻Wₑ
 
 function preweathering(C, t)
-    #CO2 concentration [ppm]
-    fCO2 = 𝒻fCO2(C)
-    #global temperature [K]
-    T = 𝒻T(fCO2, t)
-    #global runoff [m/s]
-    q = 𝒻q(T, t)
+    fCO2 = 𝒻fCO2(C) #CO2 concentration [ppm]
+    T = 𝒻T(fCO2, t) #global temperature [K]
+    q = 𝒻q(T, t) #global runoff [m/s]
     return fCO2, T, q
 end
 
@@ -195,10 +192,10 @@ function 𝒻whak(C=Cᵣ, t=𝐭; k=0.2287292550091995, β=0.2)
     w*(0.3*𝐒ₑ*yr/1e12)
 end
 
-function 𝒻mac(C=Cᵣ, t=𝐭; Λ=6.1837709746872e-5)
+function 𝒻mac(C=Cᵣ, t=𝐭; Λ=6.1837709746872e-5, β=0.2)
     fCO2, T, q = preweathering(C, t)
     #weathering rate [mole/second]
-    w = mac(q, T, fCO2, 11.1, Tᵣ, fCO2ᵣ, Λ=Λ)
+    w = mac(q, T, fCO2, 11.1, Tᵣ, fCO2ᵣ, Λ=Λ, β=β)
     #global weathering [teramole/year]
     w*(0.3*𝐒ₑ*yr/1e12)
 end
@@ -225,7 +222,7 @@ end
 
 function step(t, C, Δt, Δtₛ, μ, V, 𝒻W)::Float64
     #ordinary part
-    C += Δt*(μ - 𝒻W(C,t))*1e9
+    C += Δt*1e9*(μ - 𝒻W(C,t))
     #random part
     C += Δtₛ*1e6*(rand(V) - μ)
     return C
@@ -248,7 +245,7 @@ function simulate(V::Sampleable{Univariate,Continuous},
     return t, C
 end
 
-function simulate(V, 𝒻W; C₁=nothing, t₁=2.5, t₂=4.5, nstep::Int=1_000_000)
+function simulate(V, 𝒻W; C₁=nothing, t₁=2.5, t₂=4.5, nstep::Int=100_000)
     if isnothing(C₁)
         t, C = simulate(V, 𝒻W, Float64(t₁), Float64(t₂), Float64(𝒻Cₑ(t₁)), nstep)
     else
