@@ -11,7 +11,7 @@ pygui(true)
 
 V = PowerLaw(Vᵣ, 100Vᵣ, -1.8)
 𝒻W(C,t) = 𝒻whak(C, t, β=0)
-t₁ = 3.0
+t₁ = 3
 C₁ = 𝒻Cₑ(t₁) #𝒻Wₑ(𝒻W, t₁, mean(V))
 
 t, C = simulate(V, 𝒻W, C₁=C₁, t₁=t₁, nstep=100_000)
@@ -36,7 +36,7 @@ axs[3][:plot](gya, T, "C2")
 axs[3][:plot](gya, 𝒻T.(𝒻fCO2.(χ.(t)),t), "k", alpha=0.5, zorder=2)
 
 
-axs[4][:plot](gya, 𝒻W.(C,t), "C3")
+axs[4][:plot](gya, 𝒻W.(C,t), ".-", color="C3")
 axs[4][:plot](gya, fill(mean(V), length(t)), "k", alpha=0.5, zorder=2)
 
 axs[1][:set_title]("Ocean-Atm Carbon [Tmole]")
@@ -50,4 +50,4 @@ end
 fig[:tight_layout]()
 
 figure()
-hist(T[t .> 4] .- Tᵣ, density=true, log=true, bins=40, color="gray");
+hist(𝒻W.(C[end-10000:end],t[end-10000:end]), density=true, log=true, bins=40, color="gray");
