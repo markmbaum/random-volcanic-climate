@@ -4,8 +4,6 @@ authors = ["Mark Baum <markmbaum@protonmail.com>"]
 [deps]
 BasicInterpolators = "26cce99e-4866-4b6d-ab74-862489e035e0"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
-Cubature = "667455a9-e2ce-5579-9412-b964f529a492"
-Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 DrWatson = "634d3b9d-ee7a-5ddf-bec9-22491ea816e1"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 GEOCLIM = "3dbb98da-0543-4a00-be75-dcc1e89fb417"

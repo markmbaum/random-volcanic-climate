@@ -1,15 +1,11 @@
 module RandomVolcanicClimate
 
 using Base.Threads: @threads
-using Distributions
 using Roots: find_zero
 using BasicInterpolators: ChebyshevInterpolator
 using ForwardDiff: derivative
 using GEOCLIM: godderis, whak, mac
-
-include("PowerLawDistribution.jl")
-using .PowerLawDistribution
-export PowerLaw, ∫, mean, var
+using UnPack
 
 #------------------------------------------------------------------------------
 # time units/conversions
@@ -66,7 +62,7 @@ const hᵣ = 2.3269250670587494e20/1e12
 const Pᵣ = 1e5 - 28.5
 #default volcanic CO2 outgassing rate [teramole/yr]
 const Vᵣ = 7.0
-#land fraction for mac
+#land fraction for weathering [-]
 const γ = 0.3
 
 #OLR response to temperature
@@ -91,7 +87,8 @@ export 𝒻☉, 𝒻F, 𝒻S, 𝒻T, 𝒻ϕ, 𝒻pCO2, 𝒻fCO2, 𝒻OLR, 𝒻RI
 #global temperature [K]
 𝒻T(fCO2=fCO2ᵣ, t=𝐭, α=αᵣ) = (𝒻S(t,α) - OLRᵣ + b*log(fCO2/fCO2ᵣ))/a + Tᵣ
 
-#fraction of carbon in the atmosphere [-], see Mills et al., 2011
+#fraction of carbon in the atmosphere [-]
+# Mills, Benjamin, et al. "Timing of Neoproterozoic glaciations linked to transport-limited global weathering." Nature geoscience 4.12 (2011): 861-864.
 𝒻ϕ(C=Cᵣ, h=hᵣ) = 0.78*C/(C + h)
 
 #partial pressure of CO2 [Pa]
@@ -123,17 +120,17 @@ end
 
 export 𝒻Cₑ, Χ, dΧ
 
-function 𝒻Cₑ(t=𝐭, Tₑ=Tᵣ)
+function 𝒻Cₑ(t=𝐭, T=Tᵣ)
     #find the root in log space because total carbon is a big number
     exp10(
         find_zero(
-            x -> 𝒻RI(Tₑ, 𝒻fCO2(exp10(x)), t),
+            x -> 𝒻RI(T, 𝒻fCO2(exp10(x)), t),
             (4, 10) #good bracketing initial guesses in log space
         )
     )
 end
 
-#simple struct to rapidly interpolate χ values instead of root finding
+#simple struct to rapidly interpolate χ values instead of root finding each time
 struct Χ #capital Chi here
     interpolator::ChebyshevInterpolator{32,Float64}
 end
@@ -144,7 +141,7 @@ function Χ(Tₑ::Real=Tᵣ)
         t -> log(𝒻Cₑ(t, Float64(Tₑ))), #function to approximate
         2.5, #time interval beginning
         𝐭, #time interval end
-        32 #number of interpolation nodes
+        32 #number of interpolation nodes, 32 is more than enough
     )
     Χ(I)
 end
@@ -165,7 +162,7 @@ function dΧ(Tₑ::Real=Tᵣ)
         t -> log(-derivative(χ, t)), #function to approximate
         2.5, #time interval beginning
         𝐭, #time interval end
-        32 #number of interpolation nodes
+        32 #number of interpolation nodes, 32 is more than enough
     )
     dΧ(I)
 end
@@ -184,7 +181,7 @@ function preweathering(C, t)
     return fCO2, T, q
 end
 
-function 𝒻whak(C=Cᵣ, t=𝐭; k=0.2287292550091995, β=0.2)
+function 𝒻whak(C=Cᵣ, t=𝐭; k=0.2287292550091995, β=0.0)
     fCO2, T, q = preweathering(C, t)
     #weathering rate [mole/second]
     w = whak(q, T, fCO2, k, 11.1, Tᵣ, fCO2ᵣ, β)
@@ -200,58 +197,71 @@ function 𝒻mac(C=Cᵣ, t=𝐭; Λ=6.1837709746872e-5, β=0.2)
     w*(0.3*𝐒ₑ*yr/1e12)
 end
 
+#finds carbon reservoir where weathering balances volcanism
 𝒻Wₑ(𝒻W::F, t=𝐭, V=Vᵣ) where {F} = find_zero(C->𝒻W(C,t) - V, Cᵣ)
 
 #------------------------------------------------------------------------------
 # integration/modeling
 
-export step
-export integrate, integrations
-export simulate, simulations
+export initparams
+export simulate
 
-function setup(V, t₁, t₂, nstep)
-    @assert (t₁ > 0) & (t₂ > 0)
-    @assert t₂ > t₁
-    @assert nstep > 0
-    t = t₁
-    Δt = (t₂ - t₁)/nstep
-    Δtₛ = √(Δt)
-    μ = mean(V)
-    return t, Δt, Δtₛ, μ
+function initparams(;
+    μ::Real=Vᵣ, #mean volcanic outgassing rate [teramole/yr]
+    τ::Real=1e7, #outgassing relaxation timescale [yr]
+    σ::Real=2e-4, #outgassing variance []
+    )::NamedTuple
+    (
+        μ=Float64(μ),
+        τ=Float64(τ),
+        σ=Float64(σ)
+    )
 end
 
-function step(t, C, Δt, Δtₛ, μ, V, 𝒻W)::Float64
-    #ordinary part
-    C += Δt*1e9*(μ - 𝒻W(C,t))
-    #random part
-    C += Δtₛ*1e6*(rand(V) - μ)
-    return C
+function step(t, C, V, Δt, 𝒻W::F, params) where {F<:Function}
+    @unpack μ, τ, σ = params
+    C += Δt*(V - 𝒻W(C, t))
+    V += Δt*(μ - V)/τ + √(Δt)*σ*randn()
+    return C, V
 end
 
-#type restricted function
-function simulate(V::Sampleable{Univariate,Continuous},
-                  𝒻W::F,
-                  t₁::Float64,
+function simulate(t₁::Float64,
                   t₂::Float64,
                   C₁::Float64,
-                  nstep::Int) where {F<:Function}
-    t, Δt, Δtₛ, μ = setup(V, t₁, t₂, nstep)
+                  V₁::Float64,
+                  𝒻W::F,
+                  params::NamedTuple,
+                  nstep::Int=100_000) where {F<:Function}
     t = LinRange(t₁, t₂, nstep+1)
+    Δt = 1e9*(t₂ - t₁)/nstep
     C = zeros(nstep+1)
     C[1] = C₁
+    V = zeros(nstep+1)
+    V[1] = V₁
     for i ∈ 2:nstep+1
-        C[i] = step(t[i-1], C[i-1], Δt, Δtₛ, μ, V, 𝒻W)
+        C[i], V[i] = step(t[i-1], C[i-1], V[i-1], Δt, 𝒻W, params)
     end
-    return t, C
+    return t, C, V
 end
 
-function simulate(V, 𝒻W; C₁=nothing, t₁=2.5, t₂=4.5, nstep::Int=100_000)
-    if isnothing(C₁)
-        t, C = simulate(V, 𝒻W, Float64(t₁), Float64(t₂), Float64(𝒻Cₑ(t₁)), nstep)
-    else
-        t, C = simulate(V, 𝒻W, Float64(t₁), Float64(t₂), C₁, nstep)
-    end
-    return t, C
+function simulate(params=initparams()::NamedTuple;
+                  t₁=2.5,
+                  t₂=4.5,
+                  C₁=nothing,
+                  V₁=nothing,
+                  𝒻W=𝒻whak,
+                  nstep=100_000)
+    C = isnothing(C₁) ? 𝒻Cₑ(t₁) : C₁
+    V = isnothing(V₁) ? Vᵣ : V₁
+    simulate(
+        Float64(t₁),
+        Float64(t₂),
+        Float64(C),
+        Float64(V),
+        𝒻W,
+        params,
+        nstep
+    )
 end
 
 end
