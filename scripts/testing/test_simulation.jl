@@ -9,11 +9,22 @@ pygui(true)
 
 ##
 
+𝒻W(C,t) = 𝒻whak(C, t, β=0)
+t₁ = 2.5
+
 t, C, V = simulate(
-    t₁=2.5,
+    initparams(
+        μ=Vᵣ,
+        τ=1e7,
+        σ=1e-4,
+        Vₘ=0
+    ),
+    t₁=t₁,
     C₁=𝒻Cₑ(t₁),
-    𝒻W=(C,t)->𝒻whak(C, t, β=0)
+    𝒻W=𝒻W,
+    nstep=100_000
 )
+println(minimum(V))
 
 fCO2 = 𝒻fCO2.(C)
 T = 𝒻T.(fCO2, t)

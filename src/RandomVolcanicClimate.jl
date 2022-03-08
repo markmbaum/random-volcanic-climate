@@ -73,7 +73,7 @@ const b = 5.35
 #------------------------------------------------------------------------------
 # component physical equations
 
-export 𝒻☉, 𝒻F, 𝒻S, 𝒻T, 𝒻ϕ, 𝒻pCO2, 𝒻fCO2, 𝒻OLR, 𝒻RI, 𝒻L, 𝒻p, 𝒻q
+export 𝒻☉, 𝒻F, 𝒻S, 𝒻T, 𝒻ϕ, 𝒻pCO2, 𝒻fCO2, C2T, 𝒻OLR, 𝒻RI, 𝒻L, 𝒻p, 𝒻q
 
 #stellar luminosity fraction over time [Gya]
 𝒻☉(t=𝐭) = 1/(1 + (2/5)*(1 - t/𝐭))
@@ -100,6 +100,12 @@ function 𝒻fCO2(C=Cᵣ, P=Pᵣ, h=hᵣ)
     return 1e6*pCO2/(pCO2 + P)
 end
 
+#convert carbon reservior [Tmole] directly to temperature [K]
+function C2T(C, t=𝐭, α=αᵣ)
+    @assert C > 0
+    𝒻T(𝒻fCO2(C), t, α)
+end
+
 #outgoing longwave radiation [W/m^2]
 𝒻OLR(T=Tᵣ, fCO2=fCO2ᵣ) = OLRᵣ + a*(T - Tᵣ) - b*log(fCO2/fCO2ᵣ)
 
@@ -122,12 +128,13 @@ export 𝒻Cₑ, Χ, dΧ
 
 function 𝒻Cₑ(t=𝐭, T=Tᵣ)
     #find the root in log space because total carbon is a big number
-    exp10(
+    T = exp10(
         find_zero(
             x -> 𝒻RI(T, 𝒻fCO2(exp10(x)), t),
-            (4, 10) #good bracketing initial guesses in log space
+            (-10, 10) #good bracketing initial guesses in log space
         )
     )
+    return T
 end
 
 #simple struct to rapidly interpolate χ values instead of root finding each time
@@ -177,7 +184,7 @@ export 𝒻whak, 𝒻mac, 𝒻Wₑ
 function preweathering(C, t)
     fCO2 = 𝒻fCO2(C) #CO2 concentration [ppm]
     T = 𝒻T(fCO2, t) #global temperature [K]
-    q = 𝒻q(T, t) #global runoff [m/s]
+    q = 𝒻q(Tᵣ, t) #global runoff [m/s]
     return fCO2, T, q
 end
 
@@ -198,50 +205,76 @@ function 𝒻mac(C=Cᵣ, t=𝐭; Λ=6.1837709746872e-5, β=0.2)
 end
 
 #finds carbon reservoir where weathering balances volcanism
-𝒻Wₑ(𝒻W::F, t=𝐭, V=Vᵣ) where {F} = find_zero(C->𝒻W(C,t) - V, Cᵣ)
+function 𝒻Wₑ(𝒻W::F, V=Vᵣ, t=𝐭) where {F}
+    C = exp10(
+        find_zero(
+            x -> 𝒻W(exp10(x),t) - V,
+            (-10, 10)
+        )
+    )
+    return C
+end
 
 #------------------------------------------------------------------------------
 # integration/modeling
 
 export initparams
-export simulate
+export simulate!, simulate
 
 function initparams(;
     μ::Real=Vᵣ, #mean volcanic outgassing rate [teramole/yr]
     τ::Real=1e7, #outgassing relaxation timescale [yr]
-    σ::Real=2e-4, #outgassing variance []
+    σ::Real=1e-4, #outgassing variance []
+    Vₘ::Real=0.0, #minimum outgassing rate [teramole/yr]
+    spinup::Real=0.5 #spinup time [Gyr]
     )::NamedTuple
     (
         μ=Float64(μ),
         τ=Float64(τ),
-        σ=Float64(σ)
+        σ=Float64(σ),
+        Vₘ=Float64(Vₘ),
+        spinup=Float64(spinup)
     )
 end
 
-function step(t, C, V, Δt, 𝒻W::F, params) where {F<:Function}
-    @unpack μ, τ, σ = params
-    C += Δt*(V - 𝒻W(C, t))
-    V += Δt*(μ - V)/τ + √(Δt)*σ*randn()
-    return C, V
+function step(tᵢ, Cᵢ, Vᵢ, Δt, 𝒻W::F, params) where {F<:Function}
+    @unpack Vₘ, μ, τ, σ = params
+    Cᵢ₊₁ = Cᵢ + Δt*(Vᵢ - 𝒻W(Cᵢ, tᵢ))
+    Vᵢ₊₁ = Vᵢ + Δt*(μ - Vᵢ)/τ + √(Δt)*σ*randn()
+    Vᵢ₊₁ = Vᵢ₊₁ < Vₘ ? Vₘ : Vᵢ₊₁
+    return Cᵢ₊₁, Vᵢ₊₁
 end
 
-function simulate(t₁::Float64,
-                  t₂::Float64,
-                  C₁::Float64,
-                  V₁::Float64,
-                  𝒻W::F,
-                  params::NamedTuple,
-                  nstep::Int=100_000) where {F<:Function}
+function simulate!(C::AbstractVector,
+                   V::AbstractVector,
+                   t₁::Float64,
+                   t₂::Float64,
+                   C₁::Float64,
+                   V₁::Float64,
+                   𝒻W::F,
+                   params::NamedTuple
+                   )::Nothing where {F<:Function}
+    #check output lengths
+    @assert length(C) == length(V)
+    nstep = length(C) - 1
+    #initialize time stepping
     t = LinRange(t₁, t₂, nstep+1)
     Δt = 1e9*(t₂ - t₁)/nstep
-    C = zeros(nstep+1)
+    #spin up
+    @unpack spinup = params 
+    tₛ = 0.0
+    while tₛ < spinup*1e9
+        C₁, V₁ = step(t₁, C₁, V₁, Δt, 𝒻W, params)
+        tₛ += Δt
+    end
+    #initial values
     C[1] = C₁
-    V = zeros(nstep+1)
     V[1] = V₁
+    #solve
     for i ∈ 2:nstep+1
         C[i], V[i] = step(t[i-1], C[i-1], V[i-1], Δt, 𝒻W, params)
     end
-    return t, C, V
+    return nothing
 end
 
 function simulate(params=initparams()::NamedTuple;
@@ -250,18 +283,21 @@ function simulate(params=initparams()::NamedTuple;
                   C₁=nothing,
                   V₁=nothing,
                   𝒻W=𝒻whak,
-                  nstep=100_000)
-    C = isnothing(C₁) ? 𝒻Cₑ(t₁) : C₁
-    V = isnothing(V₁) ? Vᵣ : V₁
-    simulate(
+                  nstep=1_000_000)
+    C = zeros(nstep + 1)
+    V = zeros(nstep + 1)
+    t = LinRange(t₁, t₂, nstep + 1)
+    simulate!(
+        C,
+        V,
         Float64(t₁),
         Float64(t₂),
-        Float64(C),
-        Float64(V),
+        Float64(isnothing(C₁) ? 𝒻Cₑ(t₁) : C₁),
+        Float64(isnothing(V₁) ? Vᵣ : V₁),
         𝒻W,
-        params,
-        nstep
+        params
     )
+    return t, C, V
 end
 
 end
