@@ -1,5 +1,8 @@
 using DrWatson
 @quickactivate "Random Volcanic Climate"
+using Pkg
+Pkg.instantiate()
+
 push!(LOAD_PATH, srcdir())
 using RandomVolcanicClimate
 using IterTools: product
@@ -33,11 +36,15 @@ function ensemble(params,
         p[:,i] .= τ, σ
         i += 1
     end
-    #allocate an arrays for carbon reservoir and outgassing at stored times
-    @multiassign C, V = AxisArray(zeros(Float32, nstore, N), time=tₛ, trial=1:N)
-    #space for in-place simulations
+    #allocate an array for carbon and outgassing at all stored times
+    res = AxisArray(
+        zeros(Float32, nstore, N, 2),
+        time=tₛ,
+        trial=1:N,
+        var=[:C, :V]
+    )
+    #space for all steps of in-place simulations
     @multiassign c, v = zeros(nstep, nthreads())
-    println(size(c))
     #initial carbon reservoir size
     C₁ = 𝒻Cₑ(t₁)
     #initial outgassing rate, subject to spinup
@@ -59,10 +66,10 @@ function ensemble(params,
             )
         )
         #store selected values
-        C[:,i] .= @view c[idx,id]
-        V[:,i] .= @view v[idx,id]
+        res[:,i,:C] .= @view c[idx,id]
+        res[:,i,:V] .= @view v[idx,id]
     end
-    return p, tₛ, C, V
+    return p, res
 end
 
 ## INPUT/PARAMETERS
@@ -72,13 +79,13 @@ t₁ = 2.5
 #simulation end time [Gya]
 t₂ = 4.5
 #values for outgassing relaxation
-τ = exp10.(LinRange(6, 9, 5))
+τ = exp10.(LinRange(6, 9, 4))
 #values for outgassing variance
-σ = exp10.(LinRange(-6, -4, 5))
+σ = exp10.(LinRange(-6, -4, 4))
 #weathering function
 𝒻W(C,t) = 𝒻whak(C, t, β=0)
 #number of simulations per parameter combination
-nrealize = 5*nthreads()
+nrealize = 2*nthreads()
 #number of steps for each simulation
 nstep = 1_000_000
 #number of time slices to store
@@ -90,7 +97,7 @@ nstore = 101
 params = product(τ, σ)
 
 #simulate
-p, t, C, V = ensemble(
+p, res = ensemble(
     params,
     Float64(t₁),
     Float64(t₂),
@@ -109,8 +116,6 @@ safesave(
     ),
     Dict(
         "p"=>p,
-        "t"=>t,
-        "C"=>C,
-        "V"=>V
+        "res"=>res
     )
 )
