@@ -8,7 +8,6 @@ using GEOCLIM: godderis, whak, mac
 using UnPack
 using MultiAssign
 using AxisArrays
-using DataFrames
 using DrWatson
 
 #------------------------------------------------------------------------------
@@ -265,16 +264,17 @@ function simulate!(C::AbstractVector,
     t = LinRange(t₁, t₂, nstep+1)
     Δt = 1e9*(t₂ - t₁)/nstep
     #spin up
-    @unpack spinup = params 
-    tₛ = 0.0
-    while tₛ < spinup*1e9
+    @unpack spinup = params
+    spinup *= 1e9
+    tspin = 0.0
+    while tspin < spinup
         C₁, V₁ = step(t₁, C₁, V₁, Δt, 𝒻W, params)
-        tₛ += Δt
+        tspin += Δt
     end
     #initial values
     C[1] = C₁
     V[1] = V₁
-    #solve
+    #solve/integrate
     for i ∈ 2:nstep+1
         C[i], V[i] = step(t[i-1], C[i-1], V[i-1], Δt, 𝒻W, params)
     end
@@ -302,38 +302,6 @@ function simulate(params=initparams()::NamedTuple;
         params
     )
     return t, C, V
-end
-
-#------------------------------------------------------------------------------
-
-export frameresults, loadensemble
-
-function frameresults(p::AxisArray, res::AxisArray)
-    #unpack the time samples [Gyr]
-    t = AxisArrays.axes(res)[1].val
-    #unpack size of ensemble
-    nstore, N, _ = size(res)
-    #create dataframes for C and V
-    @multiassign dfC, dfV = DataFrame(
-        zeros(N, nstore + 2),
-        vcat(
-            [:τ, :σ],
-            map(Symbol, 1:nstore)
-        )
-    )
-    @multiassign dfC[!,:τ], dfV[!,:τ] = p[:τ,:]
-    @multiassign dfC[!,:σ], dfV[!,:σ] = p[:σ,:]
-    dfC[!,3:end] .= res[:,:,:C]'
-    dfV[!,3:end] .= res[:,:,:V]'
-    return t, dfC, dfV
-end
-
-function loadensemble(fn::String)
-    #load the saved dictionary and unpack it
-    ens = wload(fn)
-    @unpack p, res = ens
-    #reformat as DataFrames
-    frameresults(p, res)
 end
 
 end
