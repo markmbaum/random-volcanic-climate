@@ -6,6 +6,10 @@ using BasicInterpolators: ChebyshevInterpolator
 using ForwardDiff: derivative
 using GEOCLIM: godderis, whak, mac
 using UnPack
+using MultiAssign
+using AxisArrays
+using DataFrames
+using DrWatson
 
 #------------------------------------------------------------------------------
 # time units/conversions
@@ -298,6 +302,38 @@ function simulate(params=initparams()::NamedTuple;
         params
     )
     return t, C, V
+end
+
+#------------------------------------------------------------------------------
+
+export frameresults, loadensemble
+
+function frameresults(p::AxisArray, res::AxisArray)
+    #unpack the time samples [Gyr]
+    t = AxisArrays.axes(res)[1].val
+    #unpack size of ensemble
+    nstore, N, _ = size(res)
+    #create dataframes for C and V
+    @multiassign dfC, dfV = DataFrame(
+        zeros(N, nstore + 2),
+        vcat(
+            [:τ, :σ],
+            map(Symbol, 1:nstore)
+        )
+    )
+    @multiassign dfC[!,:τ], dfV[!,:τ] = p[:τ,:]
+    @multiassign dfC[!,:σ], dfV[!,:σ] = p[:σ,:]
+    dfC[!,3:end] .= res[:,:,:C]'
+    dfV[!,3:end] .= res[:,:,:V]'
+    return t, dfC, dfV
+end
+
+function loadensemble(fn::String)
+    #load the saved dictionary and unpack it
+    ens = wload(fn)
+    @unpack p, res = ens
+    #reformat as DataFrames
+    frameresults(p, res)
 end
 
 end

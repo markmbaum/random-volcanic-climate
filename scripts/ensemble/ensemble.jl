@@ -9,6 +9,7 @@ using IterTools: product
 using AxisArrays
 using MultiAssign
 using Base.Threads: @threads, nthreads, threadid
+using ProgressMeter
 
 ## FUNCTIONS
 
@@ -21,11 +22,12 @@ function ensemble(params,
                   𝒻W::F
                   ) where {F<:Function}
     println(stdout, "starting ensemble with $(nthreads()) threads")
-    flush(stdout)
     #number of parameter combinations
     L = length(params)
     #total number of simulations
     N = L*nrealize
+    println(stdout, "$N total simulations")
+    flush(stdout)
     #predict the time samples and their indices
     idx = Int.(round.(range(1, nstep, nstore)))
     tₛ = round.(LinRange(t₁, t₂, nstep)[idx], sigdigits=4)
@@ -50,6 +52,7 @@ function ensemble(params,
     #initial outgassing rate, subject to spinup
     V₁ = Vᵣ
     #simulate
+    progress = Progress(N)
     @threads for i ∈ 1:N
         id = threadid()
         simulate!(
@@ -68,15 +71,17 @@ function ensemble(params,
         #store selected values
         res[:,i,:C] .= @view c[idx,id]
         res[:,i,:V] .= @view v[idx,id]
+        #progress updates
+        next!(progress)
     end
     return p, res
 end
 
 ## INPUT/PARAMETERS
 
-#simulation start time [Gya]
+#simulation start time [Gyr]
 t₁ = 2.5
-#simulation end time [Gya]
+#simulation end time [Gyr]
 t₂ = 4.5
 #values for outgassing relaxation
 τ = exp10.(LinRange(6, 9, 4))
@@ -85,11 +90,11 @@ t₂ = 4.5
 #weathering function
 𝒻W(C,t) = 𝒻whak(C, t, β=0)
 #number of simulations per parameter combination
-nrealize = 2*nthreads()
+nrealize = 20*nthreads()
 #number of steps for each simulation
 nstep = 1_000_000
 #number of time slices to store
-nstore = 101
+nstore = 51
 
 ## MAIN
 
