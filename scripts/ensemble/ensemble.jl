@@ -41,10 +41,10 @@ function ensemble(params,
     end
     #allocate an array for carbon and outgassing at all stored times
     res = AxisArray(
-        zeros(Float32, nstore, N, 4),
+        zeros(Float32, 4, nstore, N),
+        var=[:C, :V, :T, :W],
         time=t,
-        trial=1:N,
-        var=[:C, :V, :T, :W]
+        trial=1:N
     )
     #space for all steps of in-place simulations
     @multiassign c, v = zeros(nstep, nthreads())
@@ -70,11 +70,11 @@ function ensemble(params,
             )
         )
         #store selected values
-        res[:,i,:C] .= @view c[idx,id]
-        res[:,i,:V] .= @view v[idx,id]
+        res[:C,:,i] .= @view c[idx,id]
+        res[:V,:,i] .= @view v[idx,id]
         #also store temperature and weathering
-        res[:,i,:T] .= C2T.(view(res,:,i,:C), t)
-        res[:,i,:W] .= 𝒻W.(view(res,:,i,:C), t)
+        res[:T,:,i] .= C2T.(view(res,:C,:,i), t)
+        res[:W,:,i] .= 𝒻W.(view(res,:C,:,i), t)
         #progress updates
         next!(progress)
     end
@@ -88,13 +88,13 @@ t₁ = 2.5
 #simulation end time [Gyr]
 t₂ = 4.5
 #values for outgassing relaxation
-τ = exp10.(LinRange(6, 9, 4))
+τ = exp10.(LinRange(6, 8, 3))
 #values for outgassing variance
-σ = exp10.(LinRange(-6, -4, 4))
+σ = exp10.(LinRange(-6, -4, 3))
 #weathering function
 𝒻W(C,t) = 𝒻whak(C, t, β=0)
 #number of simulations per parameter combination
-nrealize = 2*nthreads()
+nrealize = 10*nthreads()
 #number of steps for each simulation
 nstep = 1_000_000
 #number of time slices to store

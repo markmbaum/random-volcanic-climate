@@ -10,7 +10,7 @@ pygui(true)
 
 ##
 
-nstep = 10_000
+nstep = 20_000
 N = 7*250
 L = 100
 T = zeros(L, N)
@@ -21,7 +21,7 @@ for i in 1:N
     tᵢ, Cᵢ, Vᵢ = simulate(
         initparams(
             μ=Vᵣ,
-            τ=1e7,
+            τ=3e8,
             σ=1e-4,
             Vₘ=0,
         ),

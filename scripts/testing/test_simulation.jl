@@ -15,7 +15,7 @@ t₁ = 2.5
 t, C, V = simulate(
     initparams(
         μ=Vᵣ,
-        τ=1e7,
+        τ=1e8,
         σ=1e-4,
         Vₘ=0
     ),
@@ -62,6 +62,8 @@ for ax ∈ axs
     ax[:invert_xaxis]()
 end
 fig[:tight_layout]()
+
+##
 
 figure()
 hist(T, density=true, log=true, bins=40, color="gray");

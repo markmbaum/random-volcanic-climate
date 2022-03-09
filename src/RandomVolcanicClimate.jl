@@ -1,7 +1,7 @@
 module RandomVolcanicClimate
 
 using Base.Threads: @threads
-using Roots: find_zero
+using Roots: find_zero, Newton
 using BasicInterpolators: ChebyshevInterpolator
 using ForwardDiff: derivative
 using GEOCLIM: godderis, whak, mac
@@ -229,6 +229,7 @@ function initparams(;
     τ::Real=1e7, #outgassing relaxation timescale [yr]
     σ::Real=1e-4, #outgassing variance []
     Vₘ::Real=0.0, #minimum outgassing rate [teramole/yr]
+    Cₘ::Real=Cᵣ/1e6, #minimum allowable C reservoir size [teramole]
     spinup::Real=0.5 #spinup time [Gyr]
     )::NamedTuple
     (
@@ -236,15 +237,16 @@ function initparams(;
         τ=Float64(τ),
         σ=Float64(σ),
         Vₘ=Float64(Vₘ),
+        Cₘ=Float64(Cₘ),
         spinup=Float64(spinup)
     )
 end
 
+
 function step(tᵢ, Cᵢ, Vᵢ, Δt, 𝒻W::F, params) where {F<:Function}
-    @unpack Vₘ, μ, τ, σ = params
-    Cᵢ₊₁ = Cᵢ + Δt*(Vᵢ - 𝒻W(Cᵢ, tᵢ))
-    Vᵢ₊₁ = Vᵢ + Δt*(μ - Vᵢ)/τ + √(Δt)*σ*randn()
-    Vᵢ₊₁ = Vᵢ₊₁ < Vₘ ? Vₘ : Vᵢ₊₁
+    @unpack μ, τ, σ, Vₘ, Cₘ = params
+    Cᵢ₊₁ = max( Cᵢ + Δt*(Vᵢ - 𝒻W(Cᵢ, tᵢ)), Cₘ )
+    Vᵢ₊₁ = max( Vᵢ + Δt*(μ - Vᵢ)/τ + √(Δt)*σ*randn(), Vₘ)
     return Cᵢ₊₁, Vᵢ₊₁
 end
 
