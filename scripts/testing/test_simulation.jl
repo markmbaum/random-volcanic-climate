@@ -15,7 +15,7 @@ t₁ = 2.5
 t, C, V = simulate(
     initparams(
         μ=Vᵣ,
-        τ=1e8,
+        τ=1e7,
         σ=1e-4,
         Vₘ=0
     ),
@@ -38,7 +38,7 @@ gya = 4.5 .- t
 fig, axs = subplots(5, 1, figsize=(6,7))
 
 axs[1][:plot](gya, V, "C3")
-#axs[1][:plot](gya, , "k", alpha=0.5, zorder=2)
+axs[1][:plot]([gya[1], gya[end]], [Vᵣ, Vᵣ], "k", alpha=0.5, zorder=2)
 
 axs[2][:plot](gya, C, "C0")
 axs[2][:plot](gya, χ.(t), "k", alpha=0.5, zorder=2)
@@ -47,7 +47,7 @@ axs[3][:plot](gya, log10.(fCO2), "C1")
 axs[3][:plot](gya, log10.(𝒻fCO2.(χ.(t))), "k", alpha=0.5, zorder=2)
 
 axs[4][:plot](gya, T, "C2")
-axs[4][:plot](gya, 𝒻T.(𝒻fCO2.(χ.(t)),t), "k", alpha=0.5, zorder=2)
+axs[4][:plot]([gya[1], gya[end]], [Tᵣ, Tᵣ], "k", alpha=0.5, zorder=2)
 
 axs[5][:plot](gya, 𝒻W.(C,t), "-", color="C4")
 axs[5][:plot](gya, fill(mean(V), length(t)), "k", alpha=0.5, zorder=2)

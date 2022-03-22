@@ -1,6 +1,6 @@
 module RandomVolcanicClimate
 
-using Base.Threads: @threads
+using Base.Threads: @threads, nthreads, threadid
 using Roots: find_zero, Newton
 using BasicInterpolators: ChebyshevInterpolator
 using ForwardDiff: derivative
@@ -9,6 +9,8 @@ using UnPack
 using MultiAssign
 using AxisArrays
 using DrWatson
+using DataFrames: DataFrame, insertcols!, stack
+using ProgressMeter: Progress, next!
 
 #------------------------------------------------------------------------------
 # time units/conversions
@@ -59,7 +61,7 @@ const ϵ = 0.03
 const αᵣ = 0.3
 #reference OLR [W/m^2]
 const OLRᵣ = (1 - αᵣ)*𝐅/4
-#default parameter for CO2 partioning [teramole]
+#default parameter for CO2 ocean-atmosphere partioning [teramole]
 const hᵣ = 2.3269250670587494e20/1e12
 #reference atmospheric pressure excluding CO2
 const Pᵣ = 1e5 - 28.5
@@ -84,11 +86,11 @@ export 𝒻☉, 𝒻F, 𝒻S, 𝒻T, 𝒻ϕ, 𝒻pCO2, 𝒻fCO2, C2T, 𝒻OLR, �
 #instellation over time [W/m^2]
 𝒻F(t=𝐭) = 𝒻☉(t)*𝐅
 
-#absorbed radiation [W/m^2]
-𝒻S(t=𝐭, α=αᵣ) = (1 - α)*𝒻F(t)/4
+#surface area averaged radiation [W/m^2]
+𝒻S(t=𝐭) = 𝒻F(t)/4
 
 #global temperature [K]
-𝒻T(fCO2=fCO2ᵣ, t=𝐭, α=αᵣ) = (𝒻S(t,α) - OLRᵣ + b*log(fCO2/fCO2ᵣ))/a + Tᵣ
+𝒻T(fCO2=fCO2ᵣ, t=𝐭, α=αᵣ) = ((1 - α)*𝒻S(t) - OLRᵣ + b*log(fCO2/fCO2ᵣ))/a + Tᵣ
 
 #fraction of carbon in the atmosphere [-]
 # Mills, Benjamin, et al. "Timing of Neoproterozoic glaciations linked to transport-limited global weathering." Nature geoscience 4.12 (2011): 861-864.
@@ -99,30 +101,28 @@ export 𝒻☉, 𝒻F, 𝒻S, 𝒻T, 𝒻ϕ, 𝒻pCO2, 𝒻fCO2, C2T, 𝒻OLR, �
 
 #molar concentration of CO2 [ppmv]
 function 𝒻fCO2(C=Cᵣ, P=Pᵣ, h=hᵣ)
+    @assert C > 0
     pCO2 = 𝒻pCO2(C, h)
     return 1e6*pCO2/(pCO2 + P)
 end
 
 #convert carbon reservior [Tmole] directly to temperature [K]
-function C2T(C, t=𝐭, α=αᵣ)
-    @assert C > 0
-    𝒻T(𝒻fCO2(C), t, α)
-end
+C2T(C, t=𝐭, α=αᵣ) = 𝒻T(𝒻fCO2(C), t, α)
 
 #outgoing longwave radiation [W/m^2]
 𝒻OLR(T=Tᵣ, fCO2=fCO2ᵣ) = OLRᵣ + a*(T - Tᵣ) - b*log(fCO2/fCO2ᵣ)
 
 #radiative imbalance [W/m^2]
-𝒻RI(T=Tᵣ, fCO2=fCO2ᵣ, t=𝐭, α=αᵣ) = 𝒻S(t, α) - 𝒻OLR(T, fCO2)
+𝒻RI(T=Tᵣ, fCO2=fCO2ᵣ, t=𝐭, α=αᵣ) = (1 - α)*𝒻S(t) - 𝒻OLR(T, fCO2)
 
 #latent heat of vaporization of water [J/m^3]
 𝒻L(T=Tᵣ) = 1.918e9*(T/(T - 33.91))^2
 
 #global precipitation [m/s]
-𝒻p(T=Tᵣ, t=𝐭) = min(pᵣ*(1 + ϵ*(T - Tᵣ)), 𝒻S(t)/𝒻L(T))
+𝒻p(T=Tᵣ, t=𝐭, α=αᵣ) = max(min(pᵣ*(1 + ϵ*(T - Tᵣ)), (1 - α)*𝒻S(t)/𝒻L(T)), zero(T))
 
 #global runoff [m/s]
-𝒻q(T=Tᵣ, t=𝐭) = Γ*𝒻p(T,t)
+𝒻q(T=Tᵣ, t=𝐭, α=αᵣ) = Γ*𝒻p(T, t, α)
 
 #------------------------------------------------------------------------------
 # equilibrium carbon content over time and its derivative
@@ -134,7 +134,7 @@ function 𝒻Cₑ(t=𝐭, T=Tᵣ)
     T = exp10(
         find_zero(
             x -> 𝒻RI(T, 𝒻fCO2(exp10(x)), t),
-            (-10, 10) #good bracketing initial guesses in log space
+            (-10, 10) #bracketing initial guesses in log space
         )
     )
     return T
@@ -182,12 +182,12 @@ end
 #------------------------------------------------------------------------------
 # weathering
 
-export 𝒻whak, 𝒻mac, 𝒻Wₑ
+export 𝒻whak, 𝒻mac, 𝒻Wₑ, 𝒻Tₑ
 
 function preweathering(C, t)
     fCO2 = 𝒻fCO2(C) #CO2 concentration [ppm]
     T = 𝒻T(fCO2, t) #global temperature [K]
-    q = 𝒻q(Tᵣ, t) #global runoff [m/s]
+    q = Γ*pᵣ #𝒻q(Tᵣ, t) #global runoff [m/s]
     return fCO2, T, q
 end
 
@@ -207,7 +207,7 @@ function 𝒻mac(C=Cᵣ, t=𝐭; Λ=6.1837709746872e-5, β=0.2)
     w*(0.3*𝐒ₑ*yr/1e12)
 end
 
-#finds carbon reservoir where weathering balances volcanism
+#finds carbon reservoir [teramole] where weathering balances volcanism [teramole/yr]
 function 𝒻Wₑ(𝒻W::F, V=Vᵣ, t=𝐭) where {F}
     C = exp10(
         find_zero(
@@ -216,6 +216,14 @@ function 𝒻Wₑ(𝒻W::F, V=Vᵣ, t=𝐭) where {F}
         )
     )
     return C
+end
+
+#finds temperature [K] where weathering balances volcanism [teramole/yr]
+function 𝒻Tₑ(𝒻W::F, V=Vᵣ, t=𝐭) where {F}
+    C = 𝒻Wₑ(𝒻W, V, t)
+    fCO2 = 𝒻fCO2(C)
+    T = 𝒻T(fCO2, t)
+    return T
 end
 
 #------------------------------------------------------------------------------
@@ -242,12 +250,11 @@ function initparams(;
     )
 end
 
-
 function step(tᵢ, Cᵢ, Vᵢ, Δt, 𝒻W::F, params) where {F<:Function}
     @unpack μ, τ, σ, Vₘ, Cₘ = params
-    Cᵢ₊₁ = max( Cᵢ + Δt*(Vᵢ - 𝒻W(Cᵢ, tᵢ)), Cₘ )
-    Vᵢ₊₁ = max( Vᵢ + Δt*(μ - Vᵢ)/τ + √(Δt)*σ*randn(), Vₘ)
-    return Cᵢ₊₁, Vᵢ₊₁
+    Cᵢ₊₁ = Cᵢ + Δt*(Vᵢ - 𝒻W(Cᵢ, tᵢ))
+    Vᵢ₊₁ = Vᵢ + Δt*(μ - Vᵢ)/τ + √(Δt)*σ*randn()
+    return max(Cᵢ₊₁, Cₘ), max(Vᵢ₊₁, Vₘ)
 end
 
 function simulate!(C::AbstractVector,
@@ -304,6 +311,153 @@ function simulate(params=initparams()::NamedTuple;
         params
     )
     return t, C, V
+end
+
+#------------------------------------------------------------------------------
+# main ensemble function
+
+export ensemble
+
+#type wrapper
+function ensemble(params, t₁, t₂, nrealize, nstep, nstore, 𝒻W::F) where {F<:Function}
+    ensemble(
+        params,
+        Float64(t₁),
+        Float64(t₂),
+        Int64(nrealize),
+        Int64(nstep),
+        Int64(nstore),
+        𝒻W
+    )
+end
+
+function ensemble(params,
+                  t₁::Float64,
+                  t₂::Float64,
+                  nrealize::Int,
+                  nstep::Int,
+                  nstore::Int,
+                  𝒻W::F
+                  ) where {F<:Function}
+    println(stdout, "starting ensemble with $(nthreads()) threads")
+    #number of parameter combinations
+    L = length(params)
+    #total number of simulations
+    N = L*nrealize
+    println(stdout, "$N total simulations")
+    flush(stdout)
+    #predict the time samples and their indices
+    idx = Int.(round.(range(1, nstep, nstore)))
+    t = round.(LinRange(t₁, t₂, nstep+1)[idx], sigdigits=4)
+    #allocate arrays for the parameter combinations and fill in values
+    @multiassign τ, σ = zeros(N)
+    i = 1
+    for p ∈ params, _ ∈ 1:nrealize
+        τ[i] = p[1]
+        σ[i] = p[2]
+        i += 1
+    end
+    #allocate an array for carbon and outgassing at all stored times
+    res = AxisArray(
+        zeros(Float32, 4, nstore, N),
+        var=[:C, :V, :T, :W],
+        time=t,
+        trial=1:N
+    )
+    #space for all steps of in-place simulations
+    @multiassign c, v = zeros(nstep, nthreads())
+    #initial carbon reservoir size
+    C₁ = 𝒻Cₑ(t₁)
+    #initial outgassing rate, subject to spinup
+    V₁ = Vᵣ
+    #simulate
+    progress = Progress(N, output=stdout)
+    @threads for i ∈ 1:N
+        id = threadid()
+        simulate!(
+            view(c, :, id),
+            view(v, :, id),
+            t₁,
+            t₂,
+            C₁,
+            V₁,
+            𝒻W,
+            initparams(
+                τ=τ[i],
+                σ=σ[i]
+            )
+        )
+        #store selected values
+        res[:C,:,i] .= @view c[idx,id]
+        res[:V,:,i] .= @view v[idx,id]
+        #also store temperature and weathering
+        res[:T,:,i] .= C2T.(view(res,:C,:,i), t)
+        res[:W,:,i] .= 𝒻W.(view(res,:C,:,i), t)
+        #progress updates
+        next!(progress)
+    end
+    return t, τ, σ, res
+end
+
+#------------------------------------------------------------------------------
+# some handy functions for saving, loading, organizing ensemble results
+
+export saveensemble, loadensemble, frameensemble, stacktimes
+
+function saveensemble(fn, t, τ, σ, res)::Nothing
+    safesave(
+        fn,
+        Dict(
+            "t"=>t,
+            "τ"=>τ,
+            "σ"=>σ,
+            "res"=>res
+        )
+    )
+    nothing
+end
+
+saveensemble(fn, X) = saveensemble(fn, X...)
+
+function loadensemble(fn::String)
+    ens = wload(fn)
+    @unpack t, τ, σ, res = ens
+    return t, τ, σ, res
+end
+
+function framevariable(var::Symbol, t, τ, σ, res)
+    N = size(res, 3)
+    L = length(t)
+    df = DataFrame(
+        zeros(Float32, N, length(t) + 2),
+        vcat(
+            [:τ, :σ],
+            map(Symbol, 1:L)
+        )
+    )
+    df[:,:τ] = τ
+    df[:,:σ] = σ
+    df[:,3:end] = res[var,:,:]'
+    return df
+end
+
+function frameensemble(t, τ, σ, res)
+    var = (:C, :V, :T, :W)
+    dfs = (framevariable(v, t, τ, σ, res) for v ∈ var)
+    return t, (; zip(var, dfs)...)
+end
+
+frameensemble(X) = frameensemble(X...)
+
+function stacktimes(df)
+    #column names that can be parsed to integers
+    timecols = [x for x ∈ names(df) if !isnothing(tryparse(Int, x))]
+    #stack/melt all the time columns
+    stack(
+        df,
+        Symbol.(timecols),
+        variable_name="time"
+    )
 end
 
 end
