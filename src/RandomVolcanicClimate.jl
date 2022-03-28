@@ -10,6 +10,7 @@ using MultiAssign
 using AxisArrays
 using DrWatson
 using DataFrames: DataFrame, insertcols!, stack
+using Statistics: median
 using ProgressMeter: Progress, next!
 
 #------------------------------------------------------------------------------
@@ -493,6 +494,18 @@ function stacktimes(df)
         Symbol.(timecols),
         variable_name="time"
     )
+end
+
+#------------------------------------------------------------------------------
+# misc
+
+export gya, mediantsnow
+
+gya(t) = 𝐭 - t
+
+function mediantsnow(tsnow::AbstractVector{𝒯}) where {𝒯}
+    m = replace(tsnow, 𝒯(NaN)=>𝒯(𝐭)) |> median
+    m == 𝒯(𝐭) ? 𝒯(NaN) : m
 end
 
 end

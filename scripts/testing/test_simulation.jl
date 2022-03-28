@@ -15,8 +15,8 @@ t₁ = 2.5
 t, C, V = simulate(
     initparams(
         μ=Vᵣ,
-        τ=1e6,
-        σ=2e-3,
+        τ=1e8,
+        σ=4e-3,
         Vₘ=0
     ),
     t₁=t₁,

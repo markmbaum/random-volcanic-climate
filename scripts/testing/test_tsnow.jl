@@ -14,7 +14,7 @@ t₁ = 2.5
 
 ##
 
-N = 100*nthreads()
+N = 500*nthreads()
 tsnow = zeros(N)
 
 @threads for i in 1:N
@@ -22,7 +22,7 @@ tsnow = zeros(N)
         initparams(
             μ=Vᵣ,
             τ=1e6,
-            σ=7e-3,
+            σ=4e-3,
             Vₘ=0
         ),
         t₁=t₁,
