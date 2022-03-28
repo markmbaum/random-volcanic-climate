@@ -274,7 +274,7 @@ function simulate!(C::AbstractVector,
     Δt = 1e9*(t₂ - t₁)/nstep
     #spin up
     @unpack spinup = params
-    spinup *= 1e9
+    spinup *= 1e9 #convert to Gyr
     tspin = 0.0
     while tspin < spinup
         C₁, V₁ = step(t₁, C₁, V₁, Δt, 𝒻W, params)
@@ -284,7 +284,7 @@ function simulate!(C::AbstractVector,
     C[1] = C₁
     V[1] = V₁
     #solve/integrate
-    for i ∈ 2:nstep+1
+    @inbounds for i ∈ 2:nstep+1
         C[i], V[i] = step(t[i-1], C[i-1], V[i-1], Δt, 𝒻W, params)
     end
     return nothing
@@ -316,9 +316,32 @@ end
 #------------------------------------------------------------------------------
 # main ensemble function
 
-export ensemble
+export ensemble, snowballtime
 
-#type wrapper
+function snowballtime(t::AbstractVector,
+                      T::AbstractVector,
+                      Tsnow::Real=280f0
+                      )::Float32
+    @assert length(t) == length(T)
+    if any(x -> x < Tsnow, T)
+        i = findfirst(x -> x < Tsnow, T)
+        if i == 1
+            return t[1]
+        else
+            #linear interpolation
+            @inbounds begin
+                t₁ = t[i-1]
+                t₂ = t[i]
+                T₁ = T[i-1]
+                T₂ = T[i]
+            end
+            return (Tsnow - T₁)*(t₂ - t₁)/(T₂ - T₁) + t₁
+        end
+    end
+    return NaN32
+end
+
+#barrier
 function ensemble(params, t₁, t₂, nrealize, nstep, nstore, 𝒻W::F) where {F<:Function}
     ensemble(
         params,
@@ -331,13 +354,15 @@ function ensemble(params, t₁, t₂, nrealize, nstep, nstore, 𝒻W::F) where {
     )
 end
 
+#params should be an iterable of (τ, σ) containers
 function ensemble(params,
                   t₁::Float64,
                   t₂::Float64,
                   nrealize::Int,
                   nstep::Int,
                   nstore::Int,
-                  𝒻W::F
+                  𝒻W::F,
+                  Tsnow::Float64=280.0,
                   ) where {F<:Function}
     println(stdout, "starting ensemble with $(nthreads()) threads")
     #number of parameter combinations
@@ -346,26 +371,30 @@ function ensemble(params,
     N = L*nrealize
     println(stdout, "$N total simulations")
     flush(stdout)
-    #predict the time samples and their indices
+    #time samples along the dense time steps of each simulation
+    tsim = LinRange(t₁, t₂, nstep + 1)
+    #time samples and their indices
     idx = Int.(round.(range(1, nstep, nstore)))
-    t = round.(LinRange(t₁, t₂, nstep+1)[idx], sigdigits=4)
+    tstore = round.(tsim[idx], sigdigits=4)
     #allocate arrays for the parameter combinations and fill in values
-    @multiassign τ, σ = zeros(N)
+    @multiassign τ, σ = zeros(Float32, N)
     i = 1
     for p ∈ params, _ ∈ 1:nrealize
         τ[i] = p[1]
         σ[i] = p[2]
         i += 1
     end
-    #allocate an array for carbon and outgassing at all stored times
+    #space for time to first snowball
+    tsnow = fill(NaN32, N)
+    #allocate an array for carbon, outgassing, and prognostics at stored times
     res = AxisArray(
         zeros(Float32, 4, nstore, N),
         var=[:C, :V, :T, :W],
-        time=t,
+        time=tstore,
         trial=1:N
     )
     #space for all steps of in-place simulations
-    @multiassign c, v = zeros(nstep, nthreads())
+    @multiassign c, v = zeros(nstep + 1, nthreads())
     #initial carbon reservoir size
     C₁ = 𝒻Cₑ(t₁)
     #initial outgassing rate, subject to spinup
@@ -374,9 +403,11 @@ function ensemble(params,
     progress = Progress(N, output=stdout)
     @threads for i ∈ 1:N
         id = threadid()
+        cᵢ = @view c[:,id]
+        vᵢ = @view v[:,id]
         simulate!(
-            view(c, :, id),
-            view(v, :, id),
+            cᵢ,
+            vᵢ,
             t₁,
             t₂,
             C₁,
@@ -391,12 +422,14 @@ function ensemble(params,
         res[:C,:,i] .= @view c[idx,id]
         res[:V,:,i] .= @view v[idx,id]
         #also store temperature and weathering
-        res[:T,:,i] .= C2T.(view(res,:C,:,i), t)
-        res[:W,:,i] .= 𝒻W.(view(res,:C,:,i), t)
+        res[:T,:,i] .= C2T.(view(res,:C,:,i), tstore)
+        res[:W,:,i] .= 𝒻W.(view(res,:C,:,i), tstore)
+        #time to snowball
+        tsnow[i] = snowballtime(tsim, C2T.(cᵢ, tsim), Tsnow)
         #progress updates
         next!(progress)
     end
-    return t, τ, σ, res
+    return tstore, τ, σ, res, tsnow
 end
 
 #------------------------------------------------------------------------------
@@ -404,14 +437,15 @@ end
 
 export saveensemble, loadensemble, frameensemble, stacktimes
 
-function saveensemble(fn, t, τ, σ, res)::Nothing
+function saveensemble(fn, t, τ, σ, res, tsnow)::Nothing
     safesave(
         fn,
         Dict(
             "t"=>t,
             "τ"=>τ,
             "σ"=>σ,
-            "res"=>res
+            "res"=>res,
+            "tsnow"=>tsnow
         )
     )
     nothing
@@ -421,29 +455,30 @@ saveensemble(fn, X) = saveensemble(fn, X...)
 
 function loadensemble(fn::String)
     ens = wload(fn)
-    @unpack t, τ, σ, res = ens
-    return t, τ, σ, res
+    @unpack t, τ, σ, res, tsnow = ens
+    return t, τ, σ, res, tsnow
 end
 
-function framevariable(var::Symbol, t, τ, σ, res)
+function framevariable(var::Symbol, t, τ, σ, res, tsnow)
     N = size(res, 3)
     L = length(t)
     df = DataFrame(
-        zeros(Float32, N, length(t) + 2),
+        zeros(Float32, N, length(t) + 3),
         vcat(
-            [:τ, :σ],
+            [:τ, :σ, :tsnow],
             map(Symbol, 1:L)
         )
     )
     df[:,:τ] = τ
     df[:,:σ] = σ
-    df[:,3:end] = res[var,:,:]'
+    df[:,:tsnow] = tsnow
+    df[:,4:end] = res[var,:,:]'
     return df
 end
 
-function frameensemble(t, τ, σ, res)
+function frameensemble(t, τ, σ, res, tsnow)
     var = (:C, :V, :T, :W)
-    dfs = (framevariable(v, t, τ, σ, res) for v ∈ var)
+    dfs = (framevariable(v, t, τ, σ, res, tsnow) for v ∈ var)
     return t, (; zip(var, dfs)...)
 end
 

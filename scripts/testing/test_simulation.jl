@@ -15,8 +15,8 @@ t₁ = 2.5
 t, C, V = simulate(
     initparams(
         μ=Vᵣ,
-        τ=1e7,
-        σ=1e-4,
+        τ=1e6,
+        σ=2e-3,
         Vₘ=0
     ),
     t₁=t₁,
@@ -28,9 +28,6 @@ println(minimum(V))
 
 fCO2 = 𝒻fCO2.(C)
 T = 𝒻T.(fCO2, t)
-#m = (t .> 4)
-#println("mean temperature = ", mean(𝒻T.(𝒻fCO2.(C),t)))
-#println("median temperature = ", median(𝒻T.(𝒻fCO2.(C),t)))
 
 gya = 4.5 .- t
 χ = Χ()
@@ -65,5 +62,5 @@ fig[:tight_layout]()
 
 ##
 
-figure()
+plt.figure()
 hist(T, density=true, log=true, bins=40, color="gray");
