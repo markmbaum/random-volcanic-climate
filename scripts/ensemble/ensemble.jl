@@ -9,20 +9,30 @@ using IterTools: product
 using Base.Threads: nthreads
 
 ##-----------------------------------------------------------------------------
-# INPUT/PARAMETERS
+# FUNCTIONS
+
+function prettylogrange(o₁, o₂)
+    #values within each order of magnitude
+    x = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8]
+    #fill in orders
+    vcat(map(i -> x * (10. ^ i), o₁:o₂)...)
+end
+
+##-----------------------------------------------------------------------------
+# ENSEMBLE PARAMETERS
 
 #simulation start time [Gyr]
 t₁ = 2.5
 #simulation end time [Gyr]
 t₂ = 4.5
 #values for outgassing relaxation
-τ = vcat(map(i->(1:9)*(10. ^ i), 5:8)...)
+τ = prettylogrange(5, 8)
 #values for outgassing variance
-σ = vcat(map(i->(1:9)*(10. ^ i), -6:-3)...)
+σ = prettylogrange(-6, -3)
 #weathering function
 𝒻W(C,t) = 𝒻whak(C, t, β=0)
 #number of simulations per parameter combination
-nrealize = 100*nthreads()
+nrealize = 160*nthreads()
 #number of steps for each simulation
 nstep = 1_000_000
 #number of time slices to store

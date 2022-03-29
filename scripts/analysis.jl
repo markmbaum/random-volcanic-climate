@@ -10,7 +10,7 @@ pygui(true)
 
 ## load results
 
-t, dfs = datadir("sims", "ensemble.jld2") |> loadensemble |> frameensemble
+t, dfs = datadir("sims", "bigensemble.jld2") |> loadensemble |> frameensemble
 uτ = sort(unique(dfs.T.τ))
 uσ = sort(unique(dfs.T.σ))
 
@@ -25,7 +25,9 @@ g = groupby(
 )
 
 figure()
-for k in g
-    semilogy(k.mediantsnow, k.σ, ":.", label="τ=$(k.τ[1])")
+for k in g[1:4:end]
+    semilogy(k.mediantsnow, k.σ, label="τ=$(k.τ[1])")
 end
+xlabel("Median Time of Snowball [Gya]")
+ylabel("Volcanic Variance σ")
 legend()
