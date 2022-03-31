@@ -387,6 +387,9 @@ function ensemble(params,
     end
     #space for time to first snowball
     tsnow = fill(NaN32, N)
+    #space for maximum C and V values
+    Cmax = fill(NaN32, N)
+    Vmax = fill(NaN32, N)
     #allocate an array for carbon, outgassing, and prognostics at stored times
     res = AxisArray(
         zeros(Float32, 4, nstore, N),
@@ -427,18 +430,21 @@ function ensemble(params,
         res[:W,:,i] .= 𝒻W.(view(res,:C,:,i), tstore)
         #time to snowball
         tsnow[i] = snowballtime(tsim, C2T.(cᵢ, tsim), Tsnow)
+        #maximum C & V values
+        Cmax[i] = maximum(cᵢ)
+        Vmax[i] = maximum(vᵢ)
         #progress updates
         next!(progress)
     end
-    return tstore, τ, σ, res, tsnow
+    return tstore, τ, σ, res, tsnow, Cmax, Vmax
 end
 
 #------------------------------------------------------------------------------
 # some handy functions for saving, loading, organizing ensemble results
 
-export saveensemble, loadensemble, frameensemble, stacktimes
+#export saveensemble, loadensemble, frameensemble, stacktimes
 
-function saveensemble(fn, t, τ, σ, res, tsnow)::Nothing
+function saveensemble(fn, t, τ, σ, res, tsnow, Cmax, Vmax)::Nothing
     safesave(
         fn,
         Dict(
@@ -446,7 +452,9 @@ function saveensemble(fn, t, τ, σ, res, tsnow)::Nothing
             "τ"=>τ,
             "σ"=>σ,
             "res"=>res,
-            "tsnow"=>tsnow
+            "tsnow"=>tsnow,
+            "Cmax"=>Cmax,
+            "Vmax"=>Vmax
         )
     )
     nothing
@@ -456,30 +464,34 @@ saveensemble(fn, X) = saveensemble(fn, X...)
 
 function loadensemble(fn::String)
     ens = wload(fn)
-    @unpack t, τ, σ, res, tsnow = ens
-    return t, τ, σ, res, tsnow
+    @unpack t, τ, σ, res, tsnow, Cmax, Vmax = ens
+    return t, τ, σ, res, tsnow, Cmax, Vmax
 end
 
-function framevariable(var::Symbol, t, τ, σ, res, tsnow)
+function framevariable(var::Symbol, t, τ, σ, res, tsnow, Cmax, Vmax)
     N = size(res, 3)
     L = length(t)
+    cols = [:τ, :σ, :tsnow, :Cmax, :Vmax]
+    iₜ = length(cols)
     df = DataFrame(
-        zeros(Float32, N, length(t) + 3),
+        zeros(Float32, N, length(t) + iₜ),
         vcat(
-            [:τ, :σ, :tsnow],
+            cols,
             map(Symbol, 1:L)
         )
     )
     df[:,:τ] = τ
     df[:,:σ] = σ
     df[:,:tsnow] = tsnow
-    df[:,4:end] = res[var,:,:]'
+    df[:,:Cmax] = Cmax
+    df[:,:Vmax] = Vmax
+    df[:,iₜ+1:end] = res[var,:,:]'
     return df
 end
 
-function frameensemble(t, τ, σ, res, tsnow)
+function frameensemble(t, τ, σ, res, args...)
     var = (:C, :V, :T, :W)
-    dfs = (framevariable(v, t, τ, σ, res, tsnow) for v ∈ var)
+    dfs = (framevariable(v, t, τ, σ, res, args...) for v ∈ var)
     return t, (; zip(var, dfs)...)
 end
 

@@ -32,7 +32,7 @@ t₂ = 4.5
 #weathering function
 𝒻W(C,t) = 𝒻whak(C, t, β=0)
 #number of simulations per parameter combination
-nrealize = 160*nthreads()
+nrealize = 120*nthreads()
 #number of steps for each simulation
 nstep = 1_000_000
 #number of time slices to store
