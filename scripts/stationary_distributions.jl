@@ -22,10 +22,10 @@ cmap = plt.cm.get_cmap("cool")
 
 ##
 
-t = [4., 4.25, 4.5]
+t = [4.2, 4.3, 4.4, 4.5]
 fig, axs = plt.subplots(2, length(t), figsize=(7,5))
 mya = @. Int(round(1e3*(4.5 - t)))
-σ = [50, 75, 100, 125, 150]
+σ = [50, 100, 150, 200]
 
 for i in 1:size(axs,2)
     Cₑ = 𝒻Cₑ(t[i]) #equilibrium carbon
@@ -51,8 +51,8 @@ for i in 1:size(axs,2)
         T = 𝒻T.(f, t[i])
         #plot T pdf
         axs[2,i].plot(
-            pdf.(N, f[T .> 270])/pdf(N, fₑ),
-            T[T .> 270],
+            pdf.(N, f)/pdf(N, fₑ),
+            T,
             color=cmap((j-1)/(length(σ)-1)),
             linewidth=1.75,
         )
@@ -72,11 +72,11 @@ for j in 1:size(axs,2)
     axs[1,j].set_xticks([0,1])
     axs[1,j].set_xticklabels([])
     axs[2,j].set_xticks([0,1])
+    axs[2,j].set_ylim(275, axs[2,j].get_ylim()[2])
     axs[1,j].set_title("$(mya[j]) Mya")
 end
-for ax ∈ axs
-    ax.grid(false, axis="x")
-    ax.set_xlim(0, 1.05)
+foreach(axs) do ax
+    ax.set_xlim(0,1.04)
 end
 fig.supxlabel("Normalized Probability Distribution")
 plt.tight_layout()

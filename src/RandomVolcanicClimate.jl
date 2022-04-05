@@ -442,7 +442,7 @@ end
 #------------------------------------------------------------------------------
 # some handy functions for saving, loading, organizing ensemble results
 
-#export saveensemble, loadensemble, frameensemble, stacktimes
+export saveensemble, loadensemble, frameensemble, stacktimes
 
 function saveensemble(fn, t, τ, σ, res, tsnow, Cmax, Vmax)::Nothing
     safesave(
@@ -471,7 +471,7 @@ end
 function framevariable(var::Symbol, t, τ, σ, res, tsnow, Cmax, Vmax)
     N = size(res, 3)
     L = length(t)
-    cols = [:τ, :σ, :tsnow, :Cmax, :Vmax]
+    cols = [:τ, :σ, :tsnow, :Cmax, :Vmax, :fmax]
     iₜ = length(cols)
     df = DataFrame(
         zeros(Float32, N, length(t) + iₜ),
@@ -485,6 +485,7 @@ function framevariable(var::Symbol, t, τ, σ, res, tsnow, Cmax, Vmax)
     df[:,:tsnow] = tsnow
     df[:,:Cmax] = Cmax
     df[:,:Vmax] = Vmax
+    df[:,:fmax] = 𝒻fCO2.(Cmax)
     df[:,iₜ+1:end] = res[var,:,:]'
     return df
 end

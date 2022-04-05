@@ -28,11 +28,11 @@ t₂ = 4.5
 #values for outgassing relaxation
 τ = prettylogrange(5, 8)
 #values for outgassing variance
-σ = prettylogrange(-6, -3)
+σ = exp10.(LinRange(-6, -3, 100)) #prettylogrange(-6, -3)
 #weathering function
 𝒻W(C,t) = 𝒻whak(C, t, β=0)
 #number of simulations per parameter combination
-nrealize = 120*nthreads()
+nrealize = 50*nthreads()
 #number of steps for each simulation
 nstep = 1_000_000
 #number of time slices to store
