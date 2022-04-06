@@ -11,11 +11,13 @@ using Base.Threads: nthreads
 ##-----------------------------------------------------------------------------
 # FUNCTIONS
 
-function prettylogrange(o₁, o₂)
+function prettylogrange(o₁::Int, o₂::Int)
     #values within each order of magnitude
     x = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8]
     #fill in orders
-    vcat(map(i -> x * (10. ^ i), o₁:o₂)...)
+    v = vcat(map(i -> x * (10. ^ i), o₁:o₂)...)
+    append!(v, 10. ^ (o₂ + 1))
+    return v
 end
 
 ##-----------------------------------------------------------------------------
@@ -28,15 +30,15 @@ t₂ = 4.5
 #values for outgassing relaxation
 τ = prettylogrange(5, 8)
 #values for outgassing variance
-σ = exp10.(LinRange(-6, -3, 100)) #prettylogrange(-6, -3)
+σ = prettylogrange(-6, -3)
 #weathering function
 𝒻W(C,t) = 𝒻whak(C, t, β=0)
 #number of simulations per parameter combination
-nrealize = 50*nthreads()
+nrealize = 300*nthreads()
 #number of steps for each simulation
 nstep = 1_000_000
 #number of time slices to store
-nstore = 11
+nstore = 6
 
 ##-----------------------------------------------------------------------------
 # MAIN
