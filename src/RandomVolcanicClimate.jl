@@ -385,11 +385,8 @@ function ensemble(params,
         σ[i] = p[2]
         i += 1
     end
-    #space for time to first snowball
-    tsnow = fill(NaN32, N)
-    #space for maximum C and V values
-    Cmax = fill(NaN32, N)
-    Vmax = fill(NaN32, N)
+    #space for extra info on each trial
+    @multiassign tsnow, Cmax, Vmax, Tmax, Tmin = fill(NaN32, N)
     #allocate an array for carbon, outgassing, and prognostics at stored times
     res = AxisArray(
         zeros(Float32, 4, nstore, N),
@@ -428,15 +425,19 @@ function ensemble(params,
         #also store temperature and weathering
         res[:T,:,i] .= C2T.(view(res,:C,:,i), tstore)
         res[:W,:,i] .= 𝒻W.(view(res,:C,:,i), tstore)
+        #full temperature solution
+        Tsim = C2T.(cᵢ, tsim)
         #time to snowball
-        tsnow[i] = snowballtime(tsim, C2T.(cᵢ, tsim), Tsnow)
-        #maximum C & V values
+        tsnow[i] = snowballtime(tsim, Tsim, Tsnow)
+        #extreme C, V, and T values
         Cmax[i] = maximum(cᵢ)
         Vmax[i] = maximum(vᵢ)
+        Tmax[i] = maximum(Tsim)
+        Tmin[i] = minimum(Tsim)
         #progress updates
         next!(progress)
     end
-    return tstore, τ, σ, res, tsnow, Cmax, Vmax
+    return tstore, τ, σ, res, tsnow, Cmax, Vmax, Tmax, Tmin
 end
 
 #------------------------------------------------------------------------------
@@ -444,7 +445,7 @@ end
 
 export saveensemble, loadensemble, frameensemble, stacktimes
 
-function saveensemble(fn, t, τ, σ, res, tsnow, Cmax, Vmax)::Nothing
+function saveensemble(fn, t, τ, σ, res, tsnow, Cmax, Vmax, Tmax, Tmin)::Nothing
     safesave(
         fn,
         Dict(
@@ -454,7 +455,9 @@ function saveensemble(fn, t, τ, σ, res, tsnow, Cmax, Vmax)::Nothing
             "res"=>res,
             "tsnow"=>tsnow,
             "Cmax"=>Cmax,
-            "Vmax"=>Vmax
+            "Vmax"=>Vmax,
+            "Tmax"=>Tmax,
+            "Tmin"=>Tmin
         )
     )
     nothing
@@ -464,14 +467,14 @@ saveensemble(fn, X) = saveensemble(fn, X...)
 
 function loadensemble(fn::String)
     ens = wload(fn)
-    @unpack t, τ, σ, res, tsnow, Cmax, Vmax = ens
-    return t, τ, σ, res, tsnow, Cmax, Vmax
+    @unpack t, τ, σ, res, tsnow, Cmax, Vmax, Tmax, Tmin = ens
+    return t, τ, σ, res, tsnow, Cmax, Vmax, Tmax, Tmin
 end
 
-function framevariable(var::Symbol, t, τ, σ, res, tsnow, Cmax, Vmax)
+function framevariable(var::Symbol, t, τ, σ, res, tsnow, Cmax, Vmax, Tmax, Tmin)
     N = size(res, 3)
     L = length(t)
-    cols = [:τ, :σ, :tsnow, :Cmax, :Vmax, :fmax]
+    cols = [:τ, :σ, :tsnow, :Cmax, :Vmax, :fmax, :Tmax, :Tmin]
     iₜ = length(cols)
     df = DataFrame(
         zeros(Float32, N, length(t) + iₜ),
@@ -486,6 +489,8 @@ function framevariable(var::Symbol, t, τ, σ, res, tsnow, Cmax, Vmax)
     df[:,:Cmax] = Cmax
     df[:,:Vmax] = Vmax
     df[:,:fmax] = 𝒻fCO2.(Cmax)
+    df[:,:Tmax] = Tmax
+    df[:,:Tmin] = Tmin
     df[:,iₜ+1:end] = res[var,:,:]'
     return df
 end
@@ -517,8 +522,12 @@ export gya, mediantsnow
 gya(t) = 𝐭 - t
 
 function mediantsnow(tsnow::AbstractVector{𝒯}) where {𝒯}
-    m = replace(tsnow, 𝒯(NaN)=>𝒯(𝐭)) |> median
-    m == 𝒯(𝐭) ? 𝒯(NaN) : m
+    if count(!isnan, tsnow) < 3
+        𝒯(NaN) #always return nan for small samples
+    else
+        #the median, ignoring nans where no snowball was reached
+        median(tsnow[findall(!isnan, tsnow)])
+    end
 end
 
 end

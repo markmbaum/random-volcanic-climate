@@ -21,27 +21,59 @@ df = combine(
         dfs.T,
         [:τ, :σ]
     ),
-    :fmax => median => :fmax
+    :fmax => median => :fmax,
+    :Tmax => median => :Tmax,
+    :Tmin => median => :Tmin
 )
 f = reshape(df[:,:fmax], length(uτ), length(uσ))
+Tmax = reshape(df[:,:Tmax], length(uτ), length(uσ))
+Tmin = reshape(df[:,:Tmin], length(uτ), length(uσ))
 
-fig, ax = plt.subplots(1, 1, figsize=(4,3.5))
-r = ax[:pcolormesh](
+fig, axs = plt.subplots(3, 1, figsize=(3.25,9))
+
+r = axs[1][:pcolormesh](
     log10.(uσ), 
     log10.(uτ), 
     f,
     vmin=minimum(f),
     vmax=1e6,
+    cmap="Oranges",
+    shading="gouraud"
+)
+cb = plt.colorbar(r, ax=axs[1])
+cb[:set_label]("median fCO2 peak [ppm]")
+cb[:set_ticks](250e3:125e3:1e6)
+axs[1][:set_ylabel]("log₁₀(τ)")
+
+r = axs[2][:pcolormesh](
+    log10.(uσ), 
+    log10.(uτ), 
+    Tmin,
+    #vmin=minimum(Tmin),
+    #vmax=maximum(Tmax),
+    cmap="Blues_r",
+    shading="gouraud"
+)
+axs[2][:set_ylabel]("log₁₀(τ)")
+cb = plt.colorbar(r, ax=axs[2])
+cb[:set_label]("median Temperature low [K]")
+
+r = axs[3][:pcolormesh](
+    log10.(uσ), 
+    log10.(uτ), 
+    Tmax,
+    #vmin=minimum(Tmin),
+    #vmax=maximum(Tmax),
     cmap="Reds",
     shading="gouraud"
 )
-cb = plt.colorbar(r, ax=ax)
-cb[:set_label]("median fCO2 peak [ppm]")
-cb[:set_ticks](250e3:125e3:1e6)
-ax[:set_xlabel]("log₁₀(σ)")
-ax[:set_ylabel]("log₁₀(τ)")
+axs[3][:set_ylabel]("log₁₀(τ)")
+axs[3][:set_xlabel]("log₁₀(σ)")
+cb = plt.colorbar(r, ax=axs[3])
+cb[:set_label]("median temperature peak [ppm]")
+
 fig[:tight_layout]()
-fig[:savefig](plotsdir("fCO2_peaks"), dpi=500)
+#fig[:savefig](plotsdir("fCO2_peaks"), dpi=500)
 
 ##
 
@@ -53,7 +85,7 @@ df = combine(
     :fmax => median => :fmax,
     :tsnow => mediantsnow => :tsnow
 )
-df = df[df.fmax .< 5e5,:]
+df = df[df.fmax .< 4e5,:]
 
 fig, ax = plt.subplots(1,1)
 cmap = plt.get_cmap("cool")
@@ -145,7 +177,7 @@ df = combine(
     :fmax => median => :fmax,
     Symbol.(1:ntime) .=> (x -> count(y -> y < 280, x)/length(x))
 )
-df = df[df.fmax .< 3.5e5, Not(:fmax)]
+df = df[df.fmax .< 4e5, Not(:fmax)]
 
 τs = [1e6, 3e6, 1e7, 3e7, 1e8]
 fig, axs = plt.subplots(1, length(τs), figsize=(7,3), sharey=true)
@@ -156,7 +188,7 @@ for (ax, τ) ∈ zip(axs, τs)
     for j ∈ 1:size(sl,1)
         σ = sl[j,:σ]
         c = (log10(σ) - minimum(logσ))/(maximum(logσ) - minimum(logσ))
-        ax.plot(
+        ax.semilogy(
             gya.(LinRange(2.5, 4.5, ntime)),
             values(sl[j,3:end]),
             color=cmap(c),
@@ -166,7 +198,7 @@ for (ax, τ) ∈ zip(axs, τs)
     ax.invert_xaxis()
     ax.set_title("τ = $(τ / 1_000_000)\nMyr")
 end
-axs[1].set_ylabel("Temperature [K]")
+axs[1].set_ylabel("Snowball Fraction")
 fig.supxlabel("Time [Gya]")
 fig.tight_layout()
 cb = colorbar(
