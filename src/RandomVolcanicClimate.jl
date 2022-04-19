@@ -386,7 +386,7 @@ function ensemble(params,
         i += 1
     end
     #space for extra info on each trial
-    @multiassign tsnow, Cmax, Vmax, Tmax, Tmin = fill(NaN32, N)
+    @multiassign tsnow, Cmax, Vmax, Tmax, Tmin, tmax, tmin = fill(NaN32, N)
     #allocate an array for carbon, outgassing, and prognostics at stored times
     res = AxisArray(
         zeros(Float32, 4, nstore, N),
@@ -432,12 +432,12 @@ function ensemble(params,
         #extreme C, V, and T values
         Cmax[i] = maximum(cᵢ)
         Vmax[i] = maximum(vᵢ)
-        Tmax[i] = maximum(Tsim)
-        Tmin[i] = minimum(Tsim)
+        Tmax[i], tmax[i] = findmax(Tsim)
+        Tmin[i], tmin[i] = findmin(Tsim)
         #progress updates
         next!(progress)
     end
-    return tstore, τ, σ, res, tsnow, Cmax, Vmax, Tmax, Tmin
+    return tstore, τ, σ, res, tsnow, Cmax, Vmax, Tmax, Tmin, tmax, tmin
 end
 
 #------------------------------------------------------------------------------
@@ -445,7 +445,7 @@ end
 
 export saveensemble, loadensemble, frameensemble, stacktimes
 
-function saveensemble(fn, t, τ, σ, res, tsnow, Cmax, Vmax, Tmax, Tmin)::Nothing
+function saveensemble(fn, t, τ, σ, res, tsnow, Cmax, Vmax, Tmax, Tmin, tmax, tmin)::Nothing
     safesave(
         fn,
         Dict(
@@ -457,7 +457,9 @@ function saveensemble(fn, t, τ, σ, res, tsnow, Cmax, Vmax, Tmax, Tmin)::Nothin
             "Cmax"=>Cmax,
             "Vmax"=>Vmax,
             "Tmax"=>Tmax,
-            "Tmin"=>Tmin
+            "Tmin"=>Tmin,
+            "tmax"=>tmax,
+            "tmin"=>tmin
         )
     )
     nothing
@@ -467,14 +469,14 @@ saveensemble(fn, X) = saveensemble(fn, X...)
 
 function loadensemble(fn::String)
     ens = wload(fn)
-    @unpack t, τ, σ, res, tsnow, Cmax, Vmax, Tmax, Tmin = ens
-    return t, τ, σ, res, tsnow, Cmax, Vmax, Tmax, Tmin
+    @unpack t, τ, σ, res, tsnow, Cmax, Vmax, Tmax, Tmin, tmax, tmin = ens
+    return t, τ, σ, res, tsnow, Cmax, Vmax, Tmax, Tmin, tmax, tmin
 end
 
-function framevariable(var::Symbol, t, τ, σ, res, tsnow, Cmax, Vmax, Tmax, Tmin)
+function framevariable(var::Symbol, t, τ, σ, res, tsnow, Cmax, Vmax, Tmax, Tmin, tmax, tmin)
     N = size(res, 3)
     L = length(t)
-    cols = [:τ, :σ, :tsnow, :Cmax, :Vmax, :fmax, :Tmax, :Tmin]
+    cols = [:τ, :σ, :tsnow, :Cmax, :Vmax, :fmax, :Tmax, :Tmin, :tmax, :tmin]
     iₜ = length(cols)
     df = DataFrame(
         zeros(Float32, N, length(t) + iₜ),
@@ -491,6 +493,8 @@ function framevariable(var::Symbol, t, τ, σ, res, tsnow, Cmax, Vmax, Tmax, Tmi
     df[:,:fmax] = 𝒻fCO2.(Cmax)
     df[:,:Tmax] = Tmax
     df[:,:Tmin] = Tmin
+    df[:,:tmax] = tmax
+    df[:,:tmin] = tmin
     df[:,iₜ+1:end] = res[var,:,:]'
     return df
 end
