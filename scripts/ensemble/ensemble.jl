@@ -30,7 +30,7 @@ t₂ = 4.5
 #values for outgassing relaxation
 τ = [1e5, 3e5, 1e6, 3e6, 1e7, 3e7, 1e8, 3e8, 1e9]
 #values for outgassing variance
-σ = prettylogrange(-6, -3)
+σ = prettylogrange(-5, -3)
 #weathering function
 𝒻W(C,t) = 𝒻whak(C, t, β=0)
 #number of simulations per parameter combination

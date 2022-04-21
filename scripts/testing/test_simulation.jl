@@ -15,8 +15,8 @@ t₁ = 2.5
 t, C, V = simulate(
     initparams(
         μ=Vᵣ,
-        τ=1e8,
-        σ=4e-3,
+        τ=5e7,
+        σ=1e-4,
         Vₘ=0
     ),
     t₁=t₁,
@@ -60,7 +60,5 @@ for ax ∈ axs
 end
 fig[:tight_layout]()
 
-##
-
 plt.figure()
-hist(T, density=true, log=true, bins=40, color="gray");
+hist((@. fCO2 - 𝒻fCO2(χ(t))), density=true, log=true, bins=40, color="gray");

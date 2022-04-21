@@ -432,8 +432,10 @@ function ensemble(params,
         #extreme C, V, and T values
         Cmax[i] = maximum(cᵢ)
         Vmax[i] = maximum(vᵢ)
-        Tmax[i], tmax[i] = findmax(Tsim)
-        Tmin[i], tmin[i] = findmin(Tsim)
+        Tmax[i], j = findmax(Tsim)
+        tmax[i] = tsim[j]
+        Tmin[i], j = findmin(Tsim)
+        tmin[i] = tsim[j]
         #progress updates
         next!(progress)
     end
