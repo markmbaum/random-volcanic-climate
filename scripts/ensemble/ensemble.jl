@@ -38,9 +38,9 @@ const τ = prettylogrange(5, 8, [1, 2.15, 3, 4.6])
 #values for outgassing variance
 const σ = prettylogrange(-5, -3, [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8])
 #number of realizations per parameter combo in initial/wide ensemble
-Nwide = 60*nthreads()
+nwide = 60*nthreads()
 #number of realizations per parameter combo in second/deep ensemble
-Ndeep = 100_000*nthreads()
+ndeep = 1_000*nthreads()
 
 ##-----------------------------------------------------------------------------
 # STAGE 1
@@ -49,7 +49,7 @@ ens = ensemble(
     product(τ, σ),
     t₁,
     t₂,
-    Nwide,
+    nwide,
     nstep,
     nstore,
     𝒻W
@@ -79,9 +79,6 @@ df = filter(
 ##-----------------------------------------------------------------------------
 # STAGE 2
 
-#number of simulations per parameter combination
-nrealize = nthreads()
-
 #simulate ensemble and save directly
 saveensemble(
     datadir(
@@ -92,7 +89,7 @@ saveensemble(
         zip(df.τ, df.σ),
         t₁,
         t₂,
-        nrealize,
+        ndeep,
         nstep,
         nstore,
         𝒻W
