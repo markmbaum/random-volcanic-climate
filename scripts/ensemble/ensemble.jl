@@ -1,61 +1,95 @@
 using DrWatson
 @quickactivate "Random Volcanic Climate"
+
 using Pkg
 Pkg.instantiate() 
 
 push!(LOAD_PATH, srcdir())
 using RandomVolcanicClimate
+using DataFrames
+using Statistics
 using IterTools: product
 using Base.Threads: nthreads
 
 ##-----------------------------------------------------------------------------
 # FUNCTIONS
 
-function prettylogrange(o₁::Int, o₂::Int)
-    #values within each order of magnitude
-    x = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8]
-    #fill in orders
+function prettylogrange(o₁::Int, o₂::Int, x::AbstractArray)
     v = vcat(map(i -> x * (10. ^ i), o₁:o₂)...)
     append!(v, 10. ^ (o₂ + 1))
     return v
 end
 
 ##-----------------------------------------------------------------------------
-# ENSEMBLE PARAMETERS
+# CONSTANTS/INPUTS
 
 #simulation start time [Gyr]
-t₁ = 2.5
+const t₁ = 2.5
 #simulation end time [Gyr]
-t₂ = 4.5
-#values for outgassing relaxation
-τ = [1e5, 3e5, 1e6, 3e6, 1e7, 3e7, 1e8, 3e8, 1e9]
-#values for outgassing variance
-σ = prettylogrange(-5, -3)
+const t₂ = 4.5
 #weathering function
-𝒻W(C,t) = 𝒻whak(C, t, β=0)
-#number of simulations per parameter combination
-nrealize = 2000*nthreads()
+const 𝒻W(C,t) = 𝒻whak(C, t, β=0)
 #number of steps for each simulation
-nstep = 1_000_000
+const nstep = 1_000_000
 #number of time slices to store
-nstore = 17
+const nstore = 17
+#values for outgassing relaxation
+const τ = prettylogrange(5, 8, [1, 2.15, 4.6])
+#values for outgassing variance
+const σ = prettylogrange(-5, -3, [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8])
+#number of realizations per parameter combo in initial/wide ensemble
+Nwide = 10*nthreads()
+#number of realizations per parameter combo in second/deep ensemble
+Ndeep = 1000*nthreads()
 
 ##-----------------------------------------------------------------------------
-# MAIN
+# STAGE 1
 
-#create parameter combinations
-params = product(τ, σ)
+ens = ensemble(
+    product(τ, σ),
+    t₁,
+    t₂,
+    Nwide,
+    nstep,
+    nstore,
+    𝒻W
+)
 
-##
+saveensemble(
+    datadir(
+        "sims",
+        "ensemble_wide.jld2"
+    ),
+    ens
+)
+
+#find where temperature range is appreciable and peak fCO2 isn't wacky high
+df = filter(
+    [:Trange,:fmax] => (a,b) -> (a > 5) & (b < 9e5),
+    combine(
+        groupby(
+            framevariable(:T, ens),
+            [:τ, :σ]
+        ),
+        [:Tmax,:Tmin] => ((a,b) -> median(a - b)) => :Trange,
+        :fmax => median => :fmax
+    )
+)
+
+##-----------------------------------------------------------------------------
+# STAGE 2
+
+#number of simulations per parameter combination
+nrealize = nthreads()
 
 #simulate ensemble and save directly
 saveensemble(
     datadir(
         "sims",
-        "ensemble.jld2"
+        "ensemble_deep.jld2"
     ),
     ensemble(
-        params,
+        zip(df.τ, df.σ),
         t₁,
         t₂,
         nrealize,

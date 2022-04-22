@@ -11,7 +11,7 @@ pygui(true)
 
 ## load results
 
-t, dfs = datadir("sims", "ensemble.jld2") |> loadensemble |> frameensemble
+t, dfs = datadir("sims", "ensemble_test.jld2") |> loadensemble |> frameensemble
 uτ = sort(unique(dfs.T.τ))
 uσ = sort(unique(dfs.T.σ))
 
