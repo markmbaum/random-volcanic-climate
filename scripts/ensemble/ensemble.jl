@@ -34,13 +34,13 @@ const nstep = 1_000_000
 #number of time slices to store
 const nstore = 17
 #values for outgassing relaxation
-const τ = prettylogrange(5, 8, [1, 2.15, 4.6])
+const τ = prettylogrange(5, 8, [1, 2.15, 3, 4.6])
 #values for outgassing variance
 const σ = prettylogrange(-5, -3, [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8])
 #number of realizations per parameter combo in initial/wide ensemble
-Nwide = 10*nthreads()
+Nwide = 60*nthreads()
 #number of realizations per parameter combo in second/deep ensemble
-Ndeep = 1000*nthreads()
+Ndeep = 100_000*nthreads()
 
 ##-----------------------------------------------------------------------------
 # STAGE 1
