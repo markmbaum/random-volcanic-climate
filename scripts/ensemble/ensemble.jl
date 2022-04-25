@@ -40,7 +40,7 @@ const σ = prettylogrange(-5, -3, [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8])
 #number of realizations per parameter combo in initial/wide ensemble
 nwide = 60*nthreads()
 #number of realizations per parameter combo in second/deep ensemble
-ndeep = 1_000*nthreads()
+ndeep = 4000*nthreads()
 
 ##-----------------------------------------------------------------------------
 # STAGE 1
