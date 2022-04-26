@@ -51,7 +51,7 @@ g = combine(
     ),
     :fmax => median => :fmax,
     [:Tmax,:Tmin] => ((a,b) -> median(a - b)) => :Trange,
-    Symbol.(1:ntime) .=> (x -> quantile(x, 0.01))
+    Symbol.(1:ntime) .=> (x -> quantile(x, 0.001))
 )
 filter!(r -> (r.fmax < 3.5e5) & (r.Trange > 2), g)
 
@@ -65,7 +65,7 @@ for (ax, τ) ∈ zip(axs, τs)
         σ = sl[j,:σ]
         c = (log10(σ) - minimum(logσ))/(maximum(logσ) - minimum(logσ))
         ax.plot(
-            gya.(LinRange(2.5, 4.5, ntime)),
+            𝒻gya.(LinRange(2.5, 4.5, ntime)),
             values(sl[j,size(sl,2)-ntime+1:end]),
             color=cmap(c),
             linewidth=1.5,

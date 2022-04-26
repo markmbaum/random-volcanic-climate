@@ -386,14 +386,14 @@ function ensemble(params,
         i += 1
     end
     #allocate an array for carbon, outgassing, and prognostics at stored times
-    res = AxisArray(
+    R = AxisArray(
         zeros(Float32, 4, nstore, N),
         var=[:C, :V, :T, :W],
         time=tstore,
         trial=1:N
     )
     #space for columns representing a single result for each trial
-    sing = AxisArray(
+    S = AxisArray(
         zeros(Float32, 7, N),
         var=[:tsno, :Cmax, :Vmax, :Tmax, :Tmin, :tmax, :tmin],
         trial=1:N
@@ -410,40 +410,33 @@ function ensemble(params,
         id = threadid()
         cᵢ = @view c[:,id]
         vᵢ = @view v[:,id]
-        simulate!(
-            cᵢ,
-            vᵢ,
-            t₁,
-            t₂,
-            C₁,
-            V₁,
-            𝒻W,
+        simulate!(cᵢ, vᵢ, t₁, t₂, C₁, V₁, 𝒻W,
             initparams(
                 τ=τ[i],
                 σ=σ[i]
             )
         )
         #store main variables at time slices
-        res[:C,:,i] .= @view c[idx,id]
-        res[:V,:,i] .= @view v[idx,id]
+        R[:C,:,i] .= @view c[idx,id]
+        R[:V,:,i] .= @view v[idx,id]
         #also store temperature and weathering
-        res[:T,:,i] .= C2T.(view(res,:C,:,i), tstore)
-        res[:W,:,i] .= 𝒻W.(view(res,:C,:,i), tstore)
+        R[:T,:,i] .= C2T.(view(R,:C,:,i), tstore)
+        R[:W,:,i] .= 𝒻W.(view(R,:C,:,i), tstore)
         #full temperature solution
         Tsim = C2T.(cᵢ, tsim)
         #time to snowball
-        sing[:tsno,i] = snowballtime(tsim, Tsim, Tsnow)
+        S[:tsno,i] = snowballtime(tsim, Tsim, Tsnow)
         #extreme C, V, and T values
-        sing[:Cmax,i] = maximum(cᵢ)
-        sing[:Vmax,i] = maximum(vᵢ)
-        sing[:Tmax,i], j = findmax(Tsim)
-        sing[:tmax,i] = tsim[j]
-        sing[:Tmin,i], j = findmin(Tsim)
-        sing[:tmin,i] = tsim[j]
+        S[:Cmax,i] = maximum(cᵢ)
+        S[:Vmax,i] = maximum(vᵢ)
+        S[:Tmax,i], j = findmax(Tsim)
+        S[:tmax,i] = tsim[j]
+        S[:Tmin,i], j = findmin(Tsim)
+        S[:tmin,i] = tsim[j]
         #progress updates
         next!(progress)
     end
-    return tstore, τ, σ, res, sing
+    return tstore, τ, σ, R, S
 end
 
 #------------------------------------------------------------------------------
@@ -451,30 +444,20 @@ end
 
 export saveensemble, loadensemble, framevariable, frameensemble, stacktimes
 
-function saveensemble(fn, t, τ, σ, res, sing)::Nothing
-    safesave(
-        fn,
-        Dict(
-            "t"=>t,
-            "τ"=>τ,
-            "σ"=>σ,
-            "res"=>res,
-            "sing"=>sing
-        )
-    )
-    nothing
+function saveensemble(fn, t, τ, σ, R, S)
+    safesave(fn, Dict("t"=>t, "τ"=>τ, "σ"=>σ, "R"=>R, "S"=>S))
 end
 
 saveensemble(fn, X) = saveensemble(fn, X...)
 
 function loadensemble(fn::String)
     ens = wload(fn)
-    @unpack t, τ, σ, res, sing = ens
-    return t, τ, σ, res, sing
+    @unpack t, τ, σ, R, S = ens
+    return t, τ, σ, R, S
 end
 
-function framevariable(var::Symbol, t, τ, σ, res, sing)
-    N = size(res, 3)
+function framevariable(var::Symbol, t, τ, σ, R, S)
+    N = size(R, 3)
     L = length(t)
     cols = [:τ, :σ, :fmax, :tsno, :Cmax, :Vmax, :Tmax, :Tmin, :tmax, :tmin]
     iₜ = length(cols)
@@ -489,21 +472,21 @@ function framevariable(var::Symbol, t, τ, σ, res, sing)
     df[:,:τ] = τ
     df[:,:σ] = σ
     #derived fCO2 peak
-    df[:,:fmax] = 𝒻fCO2.(sing[:Cmax,:])
+    df[:,:fmax] = 𝒻fCO2.(S[:Cmax,:])
     #all the singles
     for col ∈ cols[4:end]
-        df[:,col] = sing[col,:]
+        df[:,col] = S[col,:]
     end
     #snapshots of main variable
-    df[:,iₜ+1:end] = res[var,:,:]'
+    df[:,iₜ+1:end] = R[var,:,:]'
     return df
 end
 
 framevariable(var::Symbol, X) = framevariable(var, X...)
 
-function frameensemble(t, τ, σ, res, sing)
+function frameensemble(t, τ, σ, R, S)
     var = (:C, :V, :T, :W)
-    dfs = (framevariable(v, t, τ, σ, res, sing) for v ∈ var)
+    dfs = (framevariable(v, t, τ, σ, R, S) for v ∈ var)
     return t, (; zip(var, dfs)...)
 end
 
@@ -523,17 +506,8 @@ end
 #------------------------------------------------------------------------------
 # misc
 
-export gya, mediantsno
+export 𝒻gya
 
-gya(t) = 𝐭 - t
-
-function mediantsno(tsno::AbstractVector{𝒯}) where {𝒯}
-    if count(!isnan, tsno) < 3
-        𝒯(NaN) #always return nan for small samples
-    else
-        #the median, ignoring nans where no snowball was reached
-        median(tsno[findall(!isnan, tsno)])
-    end
-end
+𝒻gya(t) = 𝐭 - t
 
 end

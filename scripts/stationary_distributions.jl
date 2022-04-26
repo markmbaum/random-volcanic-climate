@@ -116,7 +116,7 @@ t = LinRange(3.5, 4.5, 1001)
 Tsnow = 280
 for i ∈ 1:length(σ)
     ax.semilogy(
-        gya.(t),
+        𝒻gya.(t),
         Psnow.(σ[i], t, Tsnow),#/Psnow(σ[i], t[end], Tsnow),
         label="σ=$(σ[i])",
         color=cmap((i-1)/(length(σ)-1)),

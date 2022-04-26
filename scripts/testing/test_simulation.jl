@@ -9,45 +9,44 @@ pygui(true)
 
 ##
 
-𝒻W(C,t) = 𝒻whak(C, t, β=0)
 t₁ = 2.5
+𝒻W(C,t) = 𝒻whak(C, t, β=0)
 
 t, C, V = simulate(
     initparams(
         μ=Vᵣ,
         τ=1e8,
-        σ=1e-3,
+        σ=1e-4,
         Vₘ=0
     ),
     t₁=t₁,
     C₁=𝒻Cₑ(t₁),
     𝒻W=𝒻W,
-    nstep=100_000
+    nstep=500_000
 )
-println(minimum(V))
 
 fCO2 = 𝒻fCO2.(C)
 T = 𝒻T.(fCO2, t)
 
-tgya = gya.(t)
+gya = 𝒻gya.(t)
 χ = Χ()
 
 fig, axs = subplots(5, 1, figsize=(6,7))
 
-axs[1][:plot](tgya, V, "C3")
-axs[1][:plot]([tgya[1], tgya[end]], [Vᵣ, Vᵣ], "k", alpha=0.5, zorder=2)
+axs[1][:plot](gya, V, "C3")
+axs[1][:plot]([gya[1], gya[end]], [Vᵣ, Vᵣ], "k", alpha=0.5, zorder=2)
 
-axs[2][:plot](tgya, C, "C0")
-axs[2][:plot](tgya, χ.(t), "k", alpha=0.5, zorder=2)
+axs[2][:plot](gya, C, "C0")
+axs[2][:plot](gya, χ.(t), "k", alpha=0.5, zorder=2)
 
-axs[3][:plot](tgya, log10.(fCO2), "C1")
-axs[3][:plot](tgya, log10.(𝒻fCO2.(χ.(t))), "k", alpha=0.5, zorder=2)
+axs[3][:plot](gya, log10.(fCO2), "C1")
+axs[3][:plot](gya, log10.(𝒻fCO2.(χ.(t))), "k", alpha=0.5, zorder=2)
 
-axs[4][:plot](tgya, T, "C2")
-axs[4][:plot]([tgya[1], tgya[end]], [Tᵣ, Tᵣ], "k", alpha=0.5, zorder=2)
+axs[4][:plot](gya, T, "C2")
+axs[4][:plot]([gya[1], gya[end]], [Tᵣ, Tᵣ], "k", alpha=0.5, zorder=2)
 
-axs[5][:plot](tgya, 𝒻W.(C,t), "-", color="C4")
-axs[5][:plot](tgya, fill(Vᵣ, length(t)), "k", alpha=0.5, zorder=2)
+axs[5][:plot](gya, 𝒻W.(C,t), "-", color="C4")
+axs[5][:plot](gya, fill(Vᵣ, length(t)), "k", alpha=0.5, zorder=2)
 
 axs[1][:set_title]("Outgassing Rate [Tmole/yr]")
 axs[2][:set_title]("Ocean-Atm Carbon [Tmole]")
