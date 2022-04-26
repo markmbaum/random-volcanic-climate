@@ -12,6 +12,15 @@ using IterTools: product
 using Base.Threads: nthreads
 
 ##-----------------------------------------------------------------------------
+# FUNCTIONS
+
+function prettylogrange(o₁::Int, o₂::Int, x::AbstractArray)
+    v = vcat(map(i -> x * (10. ^ i), o₁:o₂)...)
+    append!(v, 10. ^ (o₂ + 1))
+    return v
+end
+
+##-----------------------------------------------------------------------------
 # CONSTANTS/INPUTS
 
 #simulation start time [Gyr]
@@ -32,15 +41,6 @@ const σ = prettylogrange(-5, -3, [1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 3, 3.5, 4, 
 nwide = 60*nthreads()
 #number of realizations per parameter combo in second/deep ensemble
 ndeep = 2000*nthreads()
-
-##-----------------------------------------------------------------------------
-# FUNCTIONS
-
-function prettylogrange(o₁::Int, o₂::Int, x::AbstractArray)
-    v = vcat(map(i -> x * (10. ^ i), o₁:o₂)...)
-    append!(v, 10. ^ (o₂ + 1))
-    return v
-end
 
 ##-----------------------------------------------------------------------------
 # STAGE 1
