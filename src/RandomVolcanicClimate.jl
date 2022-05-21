@@ -1,7 +1,7 @@
 module RandomVolcanicClimate
 
 using Base.Threads: @threads, nthreads, threadid
-using Roots: find_zero, Newton
+using Roots
 using BasicInterpolators: ChebyshevInterpolator
 using ForwardDiff: derivative
 using GEOCLIM: godderis, whak, mac
@@ -132,13 +132,10 @@ export 𝒻Cₑ, Χ, dΧ
 
 function 𝒻Cₑ(t=𝐭, T=Tᵣ)
     #find the root in log space because total carbon is a big number
-    T = exp10(
-        find_zero(
-            x -> 𝒻RI(T, 𝒻fCO2(exp10(x)), t),
-            (-10, 10) #bracketing initial guesses in log space
-        )
-    )
-    return T
+    Roots.find_zero(
+        x -> 𝒻RI(T, 𝒻fCO2(exp10(x)), t),
+        (-10, 10) #bracketing initial guesses in log space
+    ) |> exp10
 end
 
 #simple struct to rapidly interpolate χ values instead of root finding each time
@@ -148,13 +145,12 @@ end
 
 #constructor
 function Χ(Tₑ::Real=Tᵣ) 
-    I = ChebyshevInterpolator(
+    ChebyshevInterpolator(
         t -> log(𝒻Cₑ(t, Float64(Tₑ))), #function to approximate
         2.5, #time interval beginning
         𝐭, #time interval end
         32 #number of interpolation nodes, 32 is more than enough
-    )
-    Χ(I)
+    ) |> Χ
 end
 
 #functor for carbon reservior yielding equilibrium temperature
@@ -169,32 +165,31 @@ function dΧ(Tₑ::Real=Tᵣ)
     #construct the carbon curve before taking its derivative
     χ = Χ(Tₑ)
     #make an interpolator for its derivative using ForwardDiff.jl
-    I = ChebyshevInterpolator(
+    ChebyshevInterpolator(
         t -> log(-derivative(χ, t)), #function to approximate
         2.5, #time interval beginning
         𝐭, #time interval end
         32 #number of interpolation nodes, 32 is more than enough
-    )
-    dΧ(I)
+    ) |> dΧ
 end
 
 (dχ::dΧ)(t) = -exp(dχ.interpolator(t))
 
 #------------------------------------------------------------------------------
-# weathering
+# weathering and some equilibrium finders
 
 export 𝒻whak, 𝒻mac, 𝒻Wₑ, 𝒻Tₑ
 
 function preweathering(C, t)
     fCO2 = 𝒻fCO2(C) #CO2 concentration [ppm]
     T = 𝒻T(fCO2, t) #global temperature [K]
-    q = Γ*pᵣ #𝒻q(Tᵣ, t) #global runoff [m/s]
+    q = Γ*pᵣ #global runoff [m/s]
     return fCO2, T, q
 end
 
 function 𝒻whak(C=Cᵣ, t=𝐭; k=0.2287292550091995, β=0.0)
     fCO2, T, q = preweathering(C, t)
-    #weathering rate [mole/second]
+    #weathering rate [mole/second/m²]
     w = whak(q, T, fCO2, k, 11.1, Tᵣ, fCO2ᵣ, β)
     #global weathering [teramole/year]
     w*(0.3*𝐒ₑ*yr/1e12)
@@ -202,30 +197,24 @@ end
 
 function 𝒻mac(C=Cᵣ, t=𝐭; Λ=6.1837709746872e-5, β=0.2)
     fCO2, T, q = preweathering(C, t)
-    #weathering rate [mole/second]
+    #weathering rate [mole/second/m²]
     w = mac(q, T, fCO2, 11.1, Tᵣ, fCO2ᵣ, Λ=Λ, β=β)
     #global weathering [teramole/year]
     w*(0.3*𝐒ₑ*yr/1e12)
 end
 
 #finds carbon reservoir [teramole] where weathering balances volcanism [teramole/yr]
-function 𝒻Wₑ(𝒻W::F, V=Vᵣ, t=𝐭) where {F}
-    C = exp10(
-        find_zero(
-            x -> 𝒻W(exp10(x),t) - V,
-            (-10, 10)
-        )
-    )
-    return C
+function 𝒻Wₑ(𝒻W::F, V=Vᵣ, t=𝐭) where {F<:Function}
+    Roots.find_zero(
+        x -> 𝒻W(exp10(x),t) - V,
+        (-10, 15),
+        Roots.Brent()
+    ) |> exp10
 end
 
 #finds temperature [K] where weathering balances volcanism [teramole/yr]
-function 𝒻Tₑ(𝒻W::F, V=Vᵣ, t=𝐭) where {F}
-    C = 𝒻Wₑ(𝒻W, V, t)
-    fCO2 = 𝒻fCO2(C)
-    T = 𝒻T(fCO2, t)
-    return T
-end
+#this can be done analytically for simple weathering formulae (whak with β=0)
+𝒻Tₑ(𝒻W::F, V=Vᵣ, t=𝐭) where {F<:Function} = 𝒻T(𝒻Wₑ(𝒻W, V, t) |> 𝒻fCO2, t)
 
 #------------------------------------------------------------------------------
 # integration/modeling
@@ -236,7 +225,7 @@ export simulate!, simulate
 function initparams(;
     μ::Real=Vᵣ, #mean volcanic outgassing rate [teramole/yr]
     τ::Real=1e7, #outgassing relaxation timescale [yr]
-    σ::Real=1e-4, #outgassing variance []
+    σ::Real=1e-4, #outgassing std [teramole/yr]
     Vₘ::Real=0.0, #minimum outgassing rate [teramole/yr]
     Cₘ::Real=Cᵣ/1e6, #minimum allowable C reservoir size [teramole]
     spinup::Real=0.5 #spinup time [Gyr]
@@ -271,11 +260,10 @@ function simulate!(C::AbstractVector,
     @assert length(C) == length(V)
     nstep = length(C) - 1
     #initialize time stepping
-    t = LinRange(t₁, t₂, nstep+1)
-    Δt = 1e9*(t₂ - t₁)/nstep
+    t = LinRange(t₁, t₂, nstep+1) #units of Gyr
+    Δt = 1e9*(t₂ - t₁)/nstep #units of yr
     #spin up
-    @unpack spinup = params
-    spinup *= 1e9 #convert to Gyr
+    spinup = 1e9*params[:spinup] #convert to Gyr
     tspin = 0.0
     while tspin < spinup
         C₁, V₁ = step(t₁, C₁, V₁, Δt, 𝒻W, params)
@@ -442,7 +430,7 @@ end
 #------------------------------------------------------------------------------
 # some handy functions for saving, loading, organizing ensemble results
 
-export saveensemble, loadensemble, framevariable, frameensemble, stacktimes
+export saveensemble, loadensemble, framevariable, frameensemble, timecols, stacktimes
 
 function saveensemble(fn, t, τ, σ, R, S)
     safesave(fn, Dict("t"=>t, "τ"=>τ, "σ"=>σ, "R"=>R, "S"=>S))
@@ -453,11 +441,11 @@ saveensemble(fn, X) = saveensemble(fn, X...)
 function loadensemble(fn::String)
     ens = wload(fn)
     @unpack t, τ, σ, R, S = ens
-    return t, τ, σ, R, S
+    return (t=t, τ=τ, σ=σ, R=R, S=S)
 end
 
-function framevariable(var::Symbol, t, τ, σ, R, S)
-    N = size(R, 3)
+function framevariable(X::AxisArray, t, τ, σ, S)
+    N = size(X, 2)
     L = length(t)
     cols = [:τ, :σ, :fmax, :tsno, :Cmax, :Vmax, :Tmax, :Tmin, :tmax, :tmin]
     iₜ = length(cols)
@@ -465,7 +453,7 @@ function framevariable(var::Symbol, t, τ, σ, R, S)
         zeros(Float32, N, length(t) + iₜ),
         vcat(
             cols,
-            map(Symbol, 1:L)
+            1:L .|> Symbol
         )
     )
     #main parameters
@@ -478,9 +466,16 @@ function framevariable(var::Symbol, t, τ, σ, R, S)
         df[:,col] = S[col,:]
     end
     #snapshots of main variable
-    df[:,iₜ+1:end] = R[var,:,:]'
+    df[:,iₜ+1:end] = X[:,:]'
     return df
 end
+
+function framevariable(X::AxisArray, ens::NamedTuple)
+    @unpack t, τ, σ, S = ens
+    framevariable(X, t, τ, σ, S)
+end
+
+framevariable(var::Symbol, t, τ, σ, R, S) = framevariable(R[var], t, τ, σ, S)
 
 framevariable(var::Symbol, X) = framevariable(var, X...)
 
@@ -492,15 +487,36 @@ end
 
 frameensemble(X) = frameensemble(X...)
 
+timecols(df::DataFrame) = [x for x ∈ names(df) if !isnothing(tryparse(Int, x))]
+
 function stacktimes(df)
-    #column names that can be parsed to integers
-    timecols = [x for x ∈ names(df) if !isnothing(tryparse(Int, x))]
     #stack/melt all the time columns
     stack(
         df,
-        Symbol.(timecols),
+        df |> timecols .|> Symbol,
         variable_name="time"
     )
+end
+
+function 𝒻Tₑ(𝒻W::F, V::AxisArray) where {F<:Function}
+    #time slices
+    t = V.axes[1] |> collect
+    #new array
+    Tₑ = similar(V)
+    N, M = size(V)
+    #fill it in
+    p = Progress(M)
+    @threads for j ∈ 1:M
+        @inbounds for i ∈ 1:N
+            try
+                Tₑ[i,j] = 𝒻Tₑ(𝒻W, V[i,j], t[i])
+            catch err
+                Tₑ[i,j] = NaN
+            end
+        end
+        next!(p)
+    end
+    return Tₑ
 end
 
 #------------------------------------------------------------------------------

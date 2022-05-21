@@ -5,7 +5,6 @@ authors = ["Mark Baum <markmbaum@protonmail.com>"]
 AxisArrays = "39de3d68-74b9-583c-8d2d-e117c070f3a9"
 BasicInterpolators = "26cce99e-4866-4b6d-ab74-862489e035e0"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
-Cubature = "667455a9-e2ce-5579-9412-b964f529a492"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 DrWatson = "634d3b9d-ee7a-5ddf-bec9-22491ea816e1"

@@ -17,30 +17,38 @@ function sharey(axs)
     nothing
 end
 
+#computes the probability of the fCO₂ value where snowball temperature is achieved
 function Psnow(σ, t, Tsnow)
     Cₑ = 𝒻Cₑ(t) #Tmole
     fₑ = 𝒻fCO2(Cₑ) #ppm
-    N = Normal(fₑ, σ)
-    #println(N)
+    N = Normal(fₑ, σ) #fCO2 distribution
     Csnow = 𝒻Cₑ(t, Tsnow)
     fsnow = 𝒻fCO2(Csnow)
-    #println(fsnow)
     pdf(N, fsnow)
+end
+
+#computes the temperature at a specified fCO₂ quantile
+function Tquantile(σ, t, q)
+    Cₑ = 𝒻Cₑ(t) #Tmole
+    fₑ = 𝒻fCO2(Cₑ) #ppm
+    N = Normal(fₑ, σ) #fCO2 distribution
+    f = quantile(N, q) #fCO2 value of specified quantile
+    𝒻T(max(f,0.0), t) #temperature at the fCO2 quantile
 end
 
 ##
 
 #time slice selections [Gyr]
-t = [4.1, 4.3, 4.5]
+t = [4, 4.25, 4.5]
 #fCO2 standard deviations [ppm]
 σ = [50, 100, 150, 200]
 
 #initialize axes
-fig, axs = plt.subplots(2, length(t), figsize=(7,4))
+fig, axs = plt.subplots(2, length(t), figsize=(7,4.5), constrained_layout=true)
 #colormap selection
 cmap = plt.cm.get_cmap("cool")
 #convert times to Mya
-mya = @. Int(round(1e3*(4.5 - t)))
+mya = @. Int(round(1e3*𝒻gya(t)))
 
 for i in 1:size(axs,2)
     Cₑ = 𝒻Cₑ(t[i]) #equilibrium carbon
@@ -56,7 +64,7 @@ for i in 1:size(axs,2)
         )
         #plot the co2 pdf
         axs[1,i].plot(
-            pdf.(N, f),
+            pdf.(N, f)/pdf(N, fₑ),
             f,
             color=cmap((j-1)/(length(σ)-1)),
             linewidth=1.75,
@@ -66,33 +74,52 @@ for i in 1:size(axs,2)
         T = 𝒻T.(f, t[i])
         #plot the same pdf against temperature coordinates
         axs[2,i].plot(
-            pdf.(N, f),
+            pdf.(N, f)/pdf(N, fₑ),
             T,
             color=cmap((j-1)/(length(σ)-1)),
             linewidth=1.75,
-            zorder=0
+            zorder=0,
+            label="σ=$(σ[j])"
         )
     end
+    axs[1,i].plot([0,1], [fₑ,fₑ], "k", linewidth=0.75, alpha=0.75)
+    axs[2,i].plot([0,1], [288,288], "k", linewidth=0.75, alpha=0.75)
+    axs[1,i].annotate(
+        raw"$\mu_{fCO_2}=$" * (fₑ |> round |> Int |> string),
+        (1,fₑ+250),
+        va="bottom",
+        ha="right"
+    )
+    fig.add_artist(
+        matplotlib.patches.ConnectionPatch(
+            xyA=(0.5,-0.05),
+            xyB=(0.5,0.9),
+            coordsA="axes fraction",
+            coordsB="axes fraction",
+            axesA=axs[1,i],
+            axesB=axs[2,i],
+            arrowstyle="->",
+            lw=2
+        )
+    )
 end
-axs[2,end].annotate(raw"$T_{snow}$", (0.01,280.1), va="bottom", ha="right")
-axs[1,end].legend()
+axs[2,1].legend()
 axs[1,1].set_ylabel("CO₂ [ppm]")
 axs[2,1].set_ylabel("Temperature [K]")
 sharey(axs[1,:])
 sharey(axs[2,:])
 foreach(axs) do ax
     ax.grid(false)
-    ax.set_xlim(0, ax.get_xlim()[2])
+    ax.set_xlim(0, 1.02)
+    ax.set_xticks([0,1])
 end
 for j in 2:size(axs,2)
     axs[1,j].set_yticklabels([])
     axs[2,j].set_yticklabels([])
 end
 for j in 1:size(axs,2)
-    axs[1,j].set_xticks([0,axs[1,j].get_xticks()[end]])
     axs[1,j].set_xticklabels([])
     axs[1,j].set_ylim(0, axs[1,j].get_ylim()[2])
-    axs[2,j].set_xticks([0,axs[2,j].get_xticks()[end]])
     axs[2,j].set_ylim(275, axs[2,j].get_ylim()[2])
     axs[2,j].plot(
         axs[2,j].get_xlim(),
@@ -104,29 +131,43 @@ for j in 1:size(axs,2)
     )
     axs[1,j].set_title("$(mya[j]) Mya")
 end
-fig.supxlabel("Probability Density")
-plt.tight_layout()
+axs[2,end].annotate(
+    raw"$T_{snow}$",
+    (axs[2,end].get_xlim()[2],280.5),
+    va="bottom",
+    ha="right"
+)
+fig.supxlabel("Normalized Probability Density")
 fig.savefig(plotsdir("stationary_distributions"), dpi=500)
 
 ## probability densities of snowball temperatures through time
 
-fig, ax = plt.subplots(1, 1, figsize=(4,3.5))
-t = LinRange(3.5, 4.5, 1001)
+fig, axs = plt.subplots(1, 2, figsize=(7,3.5), constrained_layout=true)
+t = LinRange(4, 4.5, 1001)
+gya = 𝒻gya.(t)*1e3
+
 σ = [50, 100, 150, 200]
-Tsnow = 280
+Tsnow = 280.0
+cmap = plt.cm.get_cmap("cool")
 for i ∈ 1:length(σ)
-    ax.semilogy(
-        𝒻gya.(t),
-        Psnow.(σ[i], t, Tsnow),#/Psnow(σ[i], t[end], Tsnow),
-        label="σ=$(σ[i])",
-        color=cmap((i-1)/(length(σ)-1)),
-        linewidth=2
-    )
+    color = cmap((i-1)/(length(σ)-1))
+    y = Psnow.(σ[i], t, Tsnow)
+    axs[1].semilogy(gya, y, color=color, linewidth=2)
+    y = Tquantile.(σ[i], t, 1e-2)
+    axs[2].plot(gya, y, label="σ=$(σ[i])", color=color, linewidth=2)
 end
-ax.invert_xaxis()
-ax.set_ylim(1e-16, 1)
-ax.legend()
-ax.set_xlabel("Time [Gya]")
-ax.set_ylabel("Snowball Probability Density")
-fig.tight_layout()
+
+axs[1].set_xlim(minimum(gya), maximum(gya))
+axs[1].set_ylim(1e-16, 1)
+axs[1].invert_xaxis()
+axs[1].set_xlabel("Time [Mya]")
+axs[1].set_title("Snowball Probability Density")
+
+axs[2].set_xlim(minimum(gya), maximum(gya))
+axs[2].set_ylim(275, axs[2].get_ylim()[2])
+axs[2].invert_xaxis()
+axs[2].legend()
+axs[2].set_xlabel("Time [Mya]")
+axs[2].set_title("Temperature [K] of 1ˢᵗ CO₂ Percentile")
+
 fig.savefig(plotsdir("stationary_snowball_probabilities"), dpi=500)
