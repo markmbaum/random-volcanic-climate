@@ -17,14 +17,14 @@ function sharey(axs)
     nothing
 end
 
-#computes the probability of the fCO₂ value where snowball temperature is achieved
-function Psnow(σ, t, Tsnow)
+#computes the cumulative probability up to the fCO₂ value where snowball temperature is achieved
+function Csnow(σ, t, Tsnow=280.0)
     Cₑ = 𝒻Cₑ(t) #Tmole
     fₑ = 𝒻fCO2(Cₑ) #ppm
     N = Normal(fₑ, σ) #fCO2 distribution
     Csnow = 𝒻Cₑ(t, Tsnow)
     fsnow = 𝒻fCO2(Csnow)
-    pdf(N, fsnow)
+    cdf(N, fsnow)
 end
 
 #computes the temperature at a specified fCO₂ quantile
@@ -85,7 +85,7 @@ for i in 1:size(axs,2)
     axs[1,i].plot([0,1], [fₑ,fₑ], "k", linewidth=0.75, alpha=0.75)
     axs[2,i].plot([0,1], [288,288], "k", linewidth=0.75, alpha=0.75)
     axs[1,i].annotate(
-        raw"$\mu_{fCO_2}=$" * (fₑ |> round |> Int |> string),
+        raw"$\chi=$" * (fₑ |> round |> Int |> string) * " ppm",
         (1,fₑ+250),
         va="bottom",
         ha="right"
@@ -147,12 +147,11 @@ t = LinRange(4, 4.5, 1001)
 gya = 𝒻gya.(t)*1e3
 
 σ = [50, 100, 150, 200]
-Tsnow = 280.0
 cmap = plt.cm.get_cmap("cool")
 for i ∈ 1:length(σ)
     color = cmap((i-1)/(length(σ)-1))
-    y = Psnow.(σ[i], t, Tsnow)
-    axs[1].semilogy(gya, y, color=color, linewidth=2)
+    y = Csnow.(σ[i], t)
+    axs[1].semilogy(gya, y, label="σ=$(σ[i])", color=color, linewidth=2)
     y = Tquantile.(σ[i], t, 1e-2)
     axs[2].plot(gya, y, label="σ=$(σ[i])", color=color, linewidth=2)
 end
@@ -160,14 +159,15 @@ end
 axs[1].set_xlim(minimum(gya), maximum(gya))
 axs[1].set_ylim(1e-16, 1)
 axs[1].invert_xaxis()
+axs[1].legend()
 axs[1].set_xlabel("Time [Mya]")
-axs[1].set_title("Snowball Probability Density")
+axs[1].set_title("Cumulative Snowball Probability")
 
 axs[2].set_xlim(minimum(gya), maximum(gya))
 axs[2].set_ylim(275, axs[2].get_ylim()[2])
 axs[2].invert_xaxis()
 axs[2].legend()
 axs[2].set_xlabel("Time [Mya]")
-axs[2].set_title("Temperature [K] of 1ˢᵗ CO₂ Percentile")
+axs[2].set_title("Temperature of 1ˢᵗ CO₂ Percentile")
 
 fig.savefig(plotsdir("stationary_snowball_probabilities"), dpi=500)

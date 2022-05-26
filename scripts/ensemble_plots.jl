@@ -30,7 +30,7 @@ tc = timecols(T)
 
 g = combine(groupby(T, [:τ, :σ]), :fmax => median => :fmax)
 
-fig, ax = plt.subplots(1, 1, figsize=(4,4), constrained_layout=true)
+fig, ax = plt.subplots(1, 1, figsize=(5,5), constrained_layout=true)
 r = ax[:pcolormesh](
     uσ,
     uτ/1e6,
