@@ -79,11 +79,12 @@ for (ax, τ) ∈ zip(axs, τs)
         )
     end
     ax.invert_xaxis()
-    ax.set_title("τ = $(Int(τ / 1_000_000))\nMyr")
+    ax.set_title("τ = $(Int(τ / 1_000_000)) Myr", fontsize=10)
     ax.set_ylim(275, 290)
 end
 foreach(axs) do ax
     ax.set_xlim(2, 0)
+    ax.set_xticks([2,0])
     ax.plot([2,0], [280,280], linewidth=2.5, color="k", alpha=0.5, zorder=1)
 end
 axs[end].annotate(
@@ -113,42 +114,3 @@ cb.set_ticks(-5:-2 .|> exp10)
 fig.savefig(plotsdir("T_quantiles"), dpi=500)
 
 ##
-
-D = DataFrame((Tₑ[:,tc] |> Matrix) .- (T[:,tc] |> Matrix), tc)
-D[!,:τ] = T.τ
-D[!,:σ] = T.σ
-D[!,:fmax] = T.fmax
-
-##
-
-g = combine(
-    groupby(
-        D,
-        [:τ, :σ]
-    ),
-    :fmax => median => :fmax,
-    tc .=> (x -> abs.(x) |> median) .=> tc,
-)
-filter!(r -> all(!isnan, r), g)
-
-τs = [3e6, 1e7, 3e7, 1e8, 3e8]
-fig, axs = plt.subplots(1, length(τs), figsize=(7,3.5), sharey=true, constrained_layout=true)
-cmap = plt.get_cmap("cool")
-logσ = log10.(g.σ)
-𝒻color(σ) = cmap((log10(σ) - minimum(logσ))/(maximum(logσ) - minimum(logσ)))
-for (ax, τ) ∈ zip(axs, τs)
-    sl = g[g.τ .≈ τ, :]
-    Base.show(sl)
-    for j ∈ 1:size(sl,1)
-        σ = sl[j,:σ]
-        ax.plot(
-            𝒻gya.(time),
-            values(sl[j,size(sl,2)-length(time)+1:end]),
-            color=𝒻color(σ),
-            linewidth=1.5,
-            zorder=2
-        )
-    end
-    ax.invert_xaxis()
-    ax.set_title("τ = $(Int(τ / 1_000_000))\nMyr")
-end

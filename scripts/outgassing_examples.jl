@@ -34,10 +34,12 @@ for (i,ax) in enumerate(axs)
     for j in 1:nstack
         t, V = outgassing(τ[i], σ[i])
         ax.plot(𝒻gya.(t), V .+ 6*(j-1), color="C3", linewidth=0.75, alpha=0.9)
-        ax.set_title("τ = $(Int(τ[i] / 1_000_000)) Myr\nσ = $(σ[i])")
+        ax.set_title("τ = $(Int(τ[i] / 1_000_000)) Myr\nσ = $(Int(round(σ[i]*1e4))) × 10⁻⁴ Tmole/yr")
+        ax.set_xticks([2,1,0])
     end
 end
 axs[1].set_yticks([])
 axs[1].set_ylabel("CO₂ Outgassing Rate [-]")
 fig.supxlabel("Time [Gya]")
 fig.savefig(plotsdir("outgassing_examples.png"), dpi=500)
+plt.close(fig)

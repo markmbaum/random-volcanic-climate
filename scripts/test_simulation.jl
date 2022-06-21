@@ -53,8 +53,21 @@ axs[3][:set_title]("log₁₀ fCO2 [ppmv]")
 axs[4][:set_title]("Temperature [K]")
 axs[5][:set_title]("Weathering [Tmole/yr]")
 axs[5][:set_xlabel]("Time [Gyr]")
-foreach(ax->ax.invert_xaxis(), axs)
-#fig.savefig(plotsdir("example_simulation"), dpi=500)
+for (ax,c) ∈ zip(axs, "abcde")
+    ax.annotate(
+        string(c),
+        (0.014,1.05),
+        xycoords="axes fraction",
+        va="top",
+        fontsize=12,
+        fontweight="bold",
+        backgroundcolor="white"
+    )
+    ax.invert_xaxis()
+    ax.set_xlim(2, 0)
+end
+fig.savefig(plotsdir("example_simulation"), dpi=500)
+plt.close(fig)
 
 ##
 
