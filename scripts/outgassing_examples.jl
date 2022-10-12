@@ -38,6 +38,9 @@ for (i,ax) in enumerate(axs)
         ax.set_xticks([2,1,0])
     end
 end
+foreach(axs) do ax
+    ax.invert_xaxis()
+end
 axs[1].set_yticks([])
 axs[1].set_ylabel("CO₂ Outgassing Rate [-]")
 fig.supxlabel("Time [Gya]")

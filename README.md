@@ -1,5 +1,8 @@
 # Random Volcanic Climate [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.6799309.svg)](https://doi.org/10.5281/zenodo.6799309)
 
+This repository contains simulation code for a research project on the long-term variability of Earth's carbon cycle and climate that I worked on with [Minmin Fu](https://minminfu.github.io/). The preprint is available [on arXiv](https://arxiv.org/abs/2208.02793) and the manuscript has been accepted for publication by the *Geochemistry, Geophysics, Geosystems* journal.
+
+-----
 
 This code base is using the Julia Language and [DrWatson](https://juliadynamics.github.io/DrWatson.jl/stable/)
 to make a reproducible scientific project named

@@ -52,7 +52,7 @@ axs[2][:set_title]("log₁₀ Ocean-Atmosphere Carbon [Tmole]")
 axs[3][:set_title]("log₁₀ fCO2 [ppmv]")
 axs[4][:set_title]("Temperature [K]")
 axs[5][:set_title]("Weathering [Tmole/yr]")
-axs[5][:set_xlabel]("Time [Gyr]")
+axs[5][:set_xlabel]("Time [Gya]")
 for (ax,c) ∈ zip(axs, "abcde")
     ax.annotate(
         string(c),
