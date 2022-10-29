@@ -1,6 +1,6 @@
 # Random Volcanic Climate [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.6799309.svg)](https://doi.org/10.5281/zenodo.6799309)
 
-This repository contains simulation code for a research project on the long-term variability of Earth's carbon cycle and climate that I worked on with [Minmin Fu](https://minminfu.github.io/). The preprint is available [on arXiv](https://arxiv.org/abs/2208.02793) and the manuscript has been accepted for publication by the *Geochemistry, Geophysics, Geosystems* journal.
+This repository contains simulation code for a research project on the long-term variability of Earth's carbon cycle and climate that I worked on with [Minmin Fu](https://minminfu.github.io/). The preprint is available [on arXiv](https://arxiv.org/abs/2208.02793) and the manuscript was [published](https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2022GC010611) by the *Geochemistry, Geophysics, Geosystems* journal with open access.
 
 -----
 
